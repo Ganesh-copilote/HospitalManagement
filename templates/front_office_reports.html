@@ -1,0 +1,143 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Reports - Front Office Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .dashboard-nav { background: linear-gradient(90deg, #0077b6, #0096c7); color: white; }
+        .nav-pills .nav-link.active { background-color: #0077b6; }
+        .section-card { border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .stat-card { background: white; border-radius: 10px; padding: 20px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); text-align: center; }
+        .stat-number { font-size: 2rem; font-weight: bold; color: #0077b6; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark dashboard-nav">
+        <div class="container">
+            <a class="navbar-brand" href="/front_office_dashboard">FamilyCare Connect</a>
+            <div class="d-flex">
+                <span class="navbar-text me-3">Welcome, {{ front_office.first_name }}</span>
+                <a href="/logout" class="btn btn-outline-light btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card section-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Front Office Dashboard</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        <a href="/front_office_dashboard" class="list-group-item list-group-item-action">Overview</a>
+                        <a href="/front_office/checkins" class="list-group-item list-group-item-action">Check-in/Check-out</a>
+                        <a href="/front_office/appointments" class="list-group-item list-group-item-action">Appointments</a>
+                        <a href="/front_office/patients" class="list-group-item list-group-item-action">Patient Information</a>
+                        <a href="/front_office/payments" class="list-group-item list-group-item-action">Payment Processing</a>
+                        <a href="/front_office/reports" class="list-group-item list-group-item-action active">Reports</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-9">
+                <div class="row mb-4">
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-number">{{ daily_appointments }}</div>
+                            <div class="stat-label">Daily Appointments</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-number">{{ weekly_appointments }}</div>
+                            <div class="stat-label">Weekly Appointments</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-number">₹{{ daily_revenue }}</div>
+                            <div class="stat-label">Daily Revenue</div>
+                        </div>
+                    </div>
+                    <div class="col-md-3">
+                        <div class="stat-card">
+                            <div class="stat-number">₹{{ weekly_revenue }}</div>
+                            <div class="stat-label">Weekly Revenue</div>
+                        </div>
+                    </div>
+                </div>
+
+                <div class="card section-card">
+                    <div class="card-header bg-secondary text-white">
+                        <h5 class="mb-0">Reports</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row mb-4">
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header bg-info text-white">
+                                        <h6 class="mb-0">Appointment Reports</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="reportDate" class="form-label">Select Date Range</label>
+                                            <div class="input-group">
+                                                <input type="date" class="form-control" id="startDate">
+                                                <span class="input-group-text">to</span>
+                                                <input type="date" class="form-control" id="endDate">
+                                            </div>
+                                        </div>
+                                        <button class="btn btn-primary w-100">Generate Appointment Report</button>
+                                    </div>
+                                </div>
+                            </div>
+                            <div class="col-md-6">
+                                <div class="card">
+                                    <div class="card-header bg-success text-white">
+                                        <h6 class="mb-0">Financial Reports</h6>
+                                    </div>
+                                    <div class="card-body">
+                                        <div class="mb-3">
+                                            <label for="financialMonth" class="form-label">Select Month</label>
+                                            <input type="month" class="form-control" id="financialMonth">
+                                        </div>
+                                        <button class="btn btn-success w-100">Generate Financial Report</button>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+
+                        <div class="card">
+                            <div class="card-header bg-warning text-dark">
+                                <h6 class="mb-0">Patient Statistics</h6>
+                            </div>
+                            <div class="card-body">
+                                <div class="row text-center">
+                                    <div class="col-md-4">
+                                        <h4>{{ new_patients }}</h4>
+                                        <p>New Patients This Week</p>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h4>{{ total_patients_today }}</h4>
+                                        <p>Total Patients Today</p>
+                                    </div>
+                                    <div class="col-md-4">
+                                        <h4>{{ pending_checkins }}</h4>
+                                        <p>Pending Check-ins</p>
+                                    </div>
+                                </div>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

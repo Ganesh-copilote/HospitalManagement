@@ -1,0 +1,309 @@
+<!DOCTYPE html>
+<html lang="en">
+<head>
+    <meta charset="UTF-8">
+    <meta name="viewport" content="width=device-width, initial-scale=1.0">
+    <title>Patient Details - Front Office Dashboard</title>
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+    <link href="https://cdn.jsdelivr.net/npm/bootstrap-icons@1.10.0/font/bootstrap-icons.css" rel="stylesheet">
+    <style>
+        .dashboard-nav { background: linear-gradient(90deg, #0077b6, #0096c7); color: white; }
+        .nav-pills .nav-link.active { background-color: #0077b6; }
+        .section-card { border-radius: 10px; box-shadow: 0 4px 6px rgba(0,0,0,0.1); margin-bottom: 20px; }
+        .patient-header { background-color: #f8f9fa; padding: 20px; border-radius: 10px; margin-bottom: 20px; }
+    </style>
+</head>
+<body>
+    <nav class="navbar navbar-expand-lg navbar-dark dashboard-nav">
+        <div class="container">
+            <a class="navbar-brand" href="/front_office_dashboard">FamilyCare Connect</a>
+            <div class="d-flex">
+                {% if front_office %}
+                <span class="navbar-text me-3">Welcome, {{ front_office.first_name }}</span>
+                {% else %}
+                <span class="navbar-text me-3">Welcome, Front Office Staff</span>
+                {% endif %}
+                <a href="/logout" class="btn btn-outline-light btn-sm">Logout</a>
+            </div>
+        </div>
+    </nav>
+
+    <div class="container mt-4">
+        <div class="row">
+            <div class="col-md-3">
+                <div class="card section-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Front Office Dashboard</h5>
+                    </div>
+                    <div class="list-group list-group-flush">
+                        <a href="/front_office_dashboard" class="list-group-item list-group-item-action">Overview</a>
+                        <a href="/front_office/checkins" class="list-group-item list-group-item-action">Check-in/Check-out</a>
+                        <a href="/front_office/appointments" class="list-group-item list-group-item-action">Appointments</a>
+                        <a href="/front_office/patients" class="list-group-item list-group-item-action">Patient Information</a>
+                        <a href="/front_office/payments" class="list-group-item list-group-item-action">Payment Processing</a>
+                        <a href="/front_office/reports" class="list-group-item list-group-item-action">Reports</a>
+                    </div>
+                </div>
+            </div>
+
+            <div class="col-md-9">
+                <div class="d-flex justify-content-between align-items-center mb-3">
+                    <h4>Patient Details</h4>
+                    <div>
+                        {% if is_patient_view %}
+                        <a href="/front_office/patients" class="btn btn-secondary">Back to Patient List</a>
+                        {% else %}
+                        <a href="/front_office/appointments" class="btn btn-secondary">Back to Appointments</a>
+                        {% endif %}
+                    </div>
+                </div>
+
+                {% if error %}
+                <div class="alert alert-danger">
+                    {{ error }}
+                </div>
+                {% elif appointment %}
+                
+                <!-- Appointment Information -->
+                {% if not is_patient_view %}
+                <div class="card section-card">
+                    <div class="card-header bg-info text-white">
+                        <h5 class="mb-0">Appointment Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Appointment Time:</strong> {{ appointment.slot_time or 'N/A' }}</p>
+                                <p><strong>Status:</strong> 
+                                    {% if appointment.status == 1 or appointment.status == 'Scheduled' %}
+                                    <span class="badge bg-warning">Scheduled</span>
+                                    {% elif appointment.status == 2 or appointment.status == 'Completed' %}
+                                    <span class="badge bg-success">Completed</span>
+                                    {% elif appointment.status == 3 or appointment.status == 'Cancelled' %}
+                                    <span class="badge bg-danger">Cancelled</span>
+                                    {% elif appointment.status == 'Checked In' %}
+                                    <span class="badge bg-info">Checked In</span>
+                                    {% else %}
+                                    <span class="badge bg-secondary">Unknown</span>
+                                    {% endif %}
+                                </p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Doctor:</strong> {{ appointment.doctor_name or 'N/A' }}</p>
+                                <p><strong>Specialty:</strong> {{ appointment.specialty or 'N/A' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+                {% endif %}
+
+                <!-- Patient Information -->
+                <div class="card section-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Patient Information</h5>
+                    </div>
+                    <div class="card-body">
+                        <div class="row">
+                            <div class="col-md-6">
+                                <p><strong>Name:</strong> {{ appointment.first_name }} {{ appointment.middle_name or '' }} {{ appointment.last_name }}</p>
+                                <p><strong>Age:</strong> {{ appointment.age or 'N/A' }}</p>
+                                <p><strong>Gender:</strong> {{ appointment.gender or 'N/A' }}</p>
+                                <p><strong>Phone:</strong> {{ appointment.phone or 'N/A' }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Email:</strong> {{ appointment.email or 'N/A' }}</p>
+                                <p><strong>Aadhar:</strong> {{ appointment.aadhar or 'N/A' }}</p>
+                                <p><strong>Address:</strong> {{ appointment.address or 'N/A' }}</p>
+                                <p><strong>Registration Date:</strong> {{ appointment.registration_date[:10] if appointment.registration_date else 'N/A' }}</p>
+                            </div>
+                        </div>
+                        <div class="row mt-3">
+                            <div class="col-md-6">
+                                <p><strong>Previous Medical Problems:</strong> {{ appointment.prev_problem or 'None recorded' }}</p>
+                            </div>
+                            <div class="col-md-6">
+                                <p><strong>Current Medical Problems:</strong> {{ appointment.curr_problem or 'None recorded' }}</p>
+                            </div>
+                        </div>
+                    </div>
+                </div>
+
+                <!-- Medical History -->
+                <div class="card section-card">
+                    <div class="card-header bg-success text-white">
+                        <h5 class="mb-0">Medical History</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if medical_history %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Record Type</th>
+                                        <th>Date</th>
+                                        <th>Description</th>
+                                        <th>File</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for record in medical_history %}
+                                    <tr>
+                                        <td>{{ record.record_type or 'N/A' }}</td>
+                                        <td>{{ record.record_date[:10] if record.record_date else 'N/A' }}</td>
+                                        <td>{{ record.description or 'No description' }}</td>
+                                        <td>
+                                            {% if record.file_path %}
+                                            <a href="{{ url_for('static', filename=record.file_path) }}" target="_blank" class="btn btn-sm btn-info">
+                                                View File
+                                            </a>
+                                            {% else %}
+                                            <span class="text-muted">No file</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-center text-muted">No medical records available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Previous Appointments -->
+                <div class="card section-card">
+                    <div class="card-header bg-warning text-dark">
+                        <h5 class="mb-0">Previous Appointments</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if previous_appointments %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date & Time</th>
+                                        <th>Doctor</th>
+                                        <th>Status</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for prev_app in previous_appointments %}
+                                    <tr>
+                                        <td>{{ prev_app.slot_time or 'N/A' }}</td>
+                                        <td>{{ prev_app.doctor_name or 'N/A' }}</td>
+                                        <td>
+                                            {% if prev_app.status == 1 or prev_app.status == 'Scheduled' %}
+                                            <span class="badge bg-warning">Scheduled</span>
+                                            {% elif prev_app.status == 2 or prev_app.status == 'Completed' %}
+                                            <span class="badge bg-success">Completed</span>
+                                            {% elif prev_app.status == 3 or prev_app.status == 'Cancelled' %}
+                                            <span class="badge bg-danger">Cancelled</span>
+                                            {% elif prev_app.status == 'Checked In' %}
+                                            <span class="badge bg-info">Checked In</span>
+                                            {% else %}
+                                            <span class="badge bg-secondary">Unknown</span>
+                                            {% endif %}
+                                        </td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-center text-muted">No previous appointments found.</p>
+                        {% endif %}
+                    </div>
+                </div>
+
+                <!-- Prescriptions Section -->
+                <div class="card section-card">
+                    <div class="card-header bg-primary text-white">
+                        <h5 class="mb-0">Prescriptions</h5>
+                    </div>
+                    <div class="card-body">
+                        {% if prescriptions %}
+                        <div class="table-responsive">
+                            <table class="table table-striped">
+                                <thead>
+                                    <tr>
+                                        <th>Date</th>
+                                        <th>Medication</th>
+                                        <th>Dosage</th>
+                                        <th>Frequency</th>
+                                        <th>Duration</th>
+                                        <th>Instructions</th>
+                                        <th>Notes</th>
+                                        <th>Doctor</th>
+                                    </tr>
+                                </thead>
+                                <tbody>
+                                    {% for prescription in prescriptions %}
+                                    <tr>
+                                        <td>{{ prescription.prescription_date[:10] if prescription.prescription_date else 'N/A' }}</td>
+                                        <td>{{ prescription.medication or 'N/A' }}</td>
+                                        <td>{{ prescription.dosage or 'N/A' }}</td>
+                                        <td>
+                                            {% if prescription.frequency and prescription.frequency != 'N/A' and prescription.frequency != '' %}
+                                                {{ prescription.frequency }}
+                                            {% else %}
+                                                <!-- Try to extract frequency from instructions if not in frequency field -->
+                                                {% set instructions = prescription.instructions or '' %}
+                                                {% if 'Frequency:' in instructions %}
+                                                    {% set freq_start = instructions.find('Frequency:') + 10 %}
+                                                    {% set freq_end = instructions.find(';', freq_start) if ';' in instructions[freq_start:] else instructions|length %}
+                                                    {{ instructions[freq_start:freq_end].strip() }}
+                                                {% else %}
+                                                    N/A
+                                                {% endif %}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% if prescription.duration and prescription.duration != 'N/A' and prescription.duration != '' %}
+                                                {{ prescription.duration }}
+                                            {% else %}
+                                                <!-- Try to extract duration from instructions if not in duration field -->
+                                                {% set instructions = prescription.instructions or '' %}
+                                                {% if 'Duration:' in instructions %}
+                                                    {% set dur_start = instructions.find('Duration:') + 9 %}
+                                                    {% set dur_end = instructions.find(';', dur_start) if ';' in instructions[dur_start:] else instructions|length %}
+                                                    {{ instructions[dur_start:dur_end].strip() }}
+                                                {% else %}
+                                                    N/A
+                                                {% endif %}
+                                            {% endif %}
+                                        </td>
+                                        <td>
+                                            {% set instructions = prescription.instructions or '' %}
+                                            {% if 'Instructions:' in instructions %}
+                                                {% set instr_start = instructions.find('Instructions:') + 13 %}
+                                                {{ instructions[instr_start:].strip() }}
+                                            {% else %}
+                                                {{ instructions }}
+                                            {% endif %}
+                                        </td>
+                                        <td>{{ prescription.notes or 'None' }}</td>
+                                        <td>{{ prescription.doctor_name or 'N/A' }}</td>
+                                    </tr>
+                                    {% endfor %}
+                                </tbody>
+                            </table>
+                        </div>
+                        {% else %}
+                        <p class="text-center text-muted">No prescriptions available.</p>
+                        {% endif %}
+                    </div>
+                </div>
+                
+                {% else %}
+                <div class="alert alert-danger">
+                    Patient details not found.
+                </div>
+                {% endif %}
+            </div>
+        </div>
+    </div>
+
+    <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+</body>
+</html>

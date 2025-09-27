@@ -1,0 +1,174 @@
+<!doctype html>
+<html lang="en">
+<head>
+  <meta charset="UTF-8">
+  <title>Add Family Member</title>
+  <link href="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/css/bootstrap.min.css" rel="stylesheet">
+  <link href="https://fonts.googleapis.com/css2?family=Poppins:wght@400;600&display=swap" rel="stylesheet">
+
+  <style>
+    body {
+      font-family: 'Poppins', sans-serif;
+      background: linear-gradient(to right, #06b6d4, #3b82f6);
+      min-height: 100vh;
+    }
+
+    .form-container {
+      background: #fff;
+      border-radius: 15px;
+      box-shadow: 0 8px 20px rgba(0,0,0,0.1);
+      padding: 40px;
+      width: 100%;
+      max-width: 850px;
+      margin: 40px auto; /* center below navbar */
+    }
+
+    h2 {
+      text-align: center;
+      font-weight: 600;
+      color: #333;
+      margin-bottom: 10px;
+    }
+
+    p.subtitle {
+      text-align: center;
+      color: #555;
+      margin-bottom: 25px;
+    }
+
+    .form-control, .form-select {
+      border-radius: 10px;
+      padding: 12px;
+    }
+
+    button {
+      background: #0d6efd;
+      border: none;
+      border-radius: 12px;
+      padding: 14px;
+      font-size: 18px;
+      font-weight: 600;
+      color: #fff;
+      transition: 0.3s;
+    }
+
+    button:hover {
+      background: #0b5ed7;
+    }
+  </style>
+</head>
+<body>
+
+  <!-- Navbar -->
+  <nav class="navbar navbar-expand-lg navbar-dark bg-dark" style="background: linear-gradient(90deg, #396afc, #2948ff);">
+    <div class="container-fluid">
+      <a class="navbar-brand fw-bold" href="/">HealthCare System</a>
+      <button class="navbar-toggler" type="button" data-bs-toggle="collapse" 
+              data-bs-target="#navbarNav" aria-controls="navbarNav" aria-expanded="false" 
+              aria-label="Toggle navigation">
+        <span class="navbar-toggler-icon"></span>
+      </button>
+      <div class="collapse navbar-collapse" id="navbarNav">
+        <ul class="navbar-nav ms-auto">
+          <li class="nav-item"><a class="nav-link" href="/">Home</a></li>
+          <li class="nav-item"><a class="nav-link" href="/register">Register</a></li>
+          <li class="nav-item"><a class="nav-link active" href="#">Add Member</a></li>
+          <li class="nav-item"><a class="nav-link" href="/dashboard">View Members</a></li>
+        </ul>
+      </div>
+    </div>
+  </nav>
+
+  <!-- Form -->
+  <div class="container">
+    <div class="form-container">
+      <h2>Add Family Member</h2>
+      <p class="subtitle">Link a new member to your existing Family ID</p>
+      <form method="post">
+
+        <div class="row">
+          <div class="col-md-4 mb-3">
+            <input type="text" class="form-control" name="first_name" placeholder="First Name *" required>
+          </div>
+          <div class="col-md-4 mb-3">
+            <input type="text" class="form-control" name="middle_name" placeholder="Middle Name">
+          </div>
+          <div class="col-md-4 mb-3">
+            <input type="text" class="form-control" name="last_name" placeholder="Last Name *" required>
+          </div>
+        </div>
+
+        <div class="row">
+          <div class="col-md-3 mb-3">
+            <input type="number" class="form-control" name="age" placeholder="Age *" required min="0">
+          </div>
+          <div class="col-md-3 mb-3">
+            <select class="form-select" name="gender" required>
+              <option value="">Gender *</option>
+              <option>Male</option>
+              <option>Female</option>
+              <option>Other</option>
+            </select>
+          </div>
+          <div class="col-md-3 mb-3">
+            <input type="tel" class="form-control" name="phone" placeholder="Phone *" required>
+          </div>
+          <div class="col-md-3 mb-3">
+            <input type="email" class="form-control" name="email" placeholder="Email *" required>
+          </div>
+        </div>
+
+        <div class="mb-3">
+          <input type="text" class="form-control" name="aadhar" placeholder="Aadhar Number *" required pattern="\d{12}" title="12-digit number">
+        </div>
+
+        <div class="mb-3">
+          <textarea class="form-control" name="address" placeholder="Address *" required></textarea>
+        </div>
+
+        
+        <!-- Current and Previous Problems -->
+        
+        <div class="mb-3">
+          <textarea class="form-control" name="prev_problem" placeholder="Previous Medical Problems"></textarea>
+        </div>
+        <div class="mb-3">
+          <textarea class="form-control" name="curr_problem" placeholder="Current Medical Problems"></textarea>
+        </div>
+
+        <button type="submit" class="w-100">Add Member</button>
+      </form>
+      <!-- Toast Container -->
+<div class="toast-container position-fixed bottom-0 end-0 p-3">
+  <div id="successToast" class="toast align-items-center text-bg-success border-0" role="alert" aria-live="assertive" aria-atomic="true">
+    <div class="d-flex">
+      <div class="toast-body">
+        ✅ Member added successfully!
+      </div>
+    </div>
+  </div>
+</div>
+
+
+    </div>
+  </div>
+
+  <script src="https://cdn.jsdelivr.net/npm/bootstrap@5.3.0/dist/js/bootstrap.bundle.min.js"></script>
+  <script>
+  document.querySelector("form").addEventListener("submit", function(event) {
+    event.preventDefault(); // stop immediate submit
+
+    // Show Toast
+    const toastEl = document.getElementById('successToast');
+    const toast = new bootstrap.Toast(toastEl);
+    toast.show();
+
+    // Submit the form after 2 sec (so backend receives data)
+    setTimeout(() => {
+      event.target.submit();
+    }, 2000);
+  });
+</script>
+
+</body>
+</html>

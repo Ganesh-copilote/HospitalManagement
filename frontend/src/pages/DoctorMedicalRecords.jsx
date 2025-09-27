@@ -1,0 +1,60 @@
+import { useState, useEffect } from 'react';
+import { useNavigate } from 'react-router-dom';
+import { getDoctorMedicalRecords } from '../services/api';
+import Navbar from '../components/Navbar';
+
+const DoctorMedicalRecords = () => {
+  const [records, setRecords] = useState([]);
+  const [error, setError] = useState('');
+  const navigate = useNavigate();
+
+  useEffect(() => {
+    const fetchRecords = async () => {
+      try {
+        const res = await getDoctorMedicalRecords();
+        setRecords(res.records);
+      } catch (err) {
+        setError(err);
+      }
+    };
+    fetchRecords();
+  }, []);
+
+  return (
+    <>
+      <Navbar isDashboard={true} userType="doctor" />
+      <div className="container mx-auto pt-20 px-4">
+        <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full mx-auto p-10">
+          <h2 className="text-2xl font-bold text-center mb-6">Medical Records</h2>
+          {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
+          <table className="w-full border-collapse">
+            <thead>
+              <tr className="bg-gray-100">
+                <th className="p-3 text-left">Patient</th>
+                <th className="p-3 text-left">Type</th>
+                <th className="p-3 text-left">Date</th>
+                <th className="p-3 text-left">Description</th>
+                <th className="p-3 text-left">File</th>
+              </tr>
+            </thead>
+            <tbody>
+              {records.map(record => (
+                <tr key={record.id} className="odd:bg-gray-50">
+                  <td className="p-3">{record.patient_name}</td>
+                  <td className="p-3">{record.record_type}</td>
+                  <td className="p-3">{record.record_date}</td>
+                  <td className="p-3">{record.description}</td>
+                  <td className="p-3">
+                    {record.file_path && <a href={record.file_path} className="text-blue-600 hover:underline" target="_blank" rel="noopener noreferrer">View</a>}
+                  </td>
+                </tr>
+              ))}
+            </tbody>
+          </table>
+        </div>
+      </div>
+    </>
+  );
+};
+
+export default DoctorMedicalRecords;

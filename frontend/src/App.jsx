@@ -1,0 +1,60 @@
+import { BrowserRouter as Router, Routes, Route } from 'react-router-dom';
+import Home from './pages/Home';
+import Login from './pages/Login';
+import Register from './pages/Register';
+import PatientDashboard from './pages/PatientDashboard';
+import AddFamilyMember from './pages/AddFamilyMember';
+import EditFamilyMember from './pages/EditFamilyMember';
+import BookAppointment from './pages/BookAppointment';
+import RescheduleAppointment from './pages/RescheduleAppointment';
+import ViewAppointment from './pages/ViewAppointment';
+import ViewPatientDetails from './pages/ViewPatientDetails';
+import DoctorDashboard from './pages/DoctorDashboard';
+import DoctorAppointments from './pages/DoctorAppointments';
+import DoctorMedicalRecords from './pages/DoctorMedicalRecords';
+import DoctorPatients from './pages/DoctorPatients';
+import DoctorPrescriptions from './pages/DoctorPrescriptions';
+import DoctorSchedule from './pages/DoctorSchedule';
+import DoctorViewPatient from './pages/DoctorViewPatient';
+import FrontOfficeDashboard from './pages/FrontOfficeDashboard';
+import FrontOfficePatient from './pages/FrontOfficePatient';
+import FrontOfficeCheckins from './pages/FrontOfficeCheckins';
+import FrontOfficeAppointments from './pages/FrontOfficeAppointments';
+import FrontOfficePayments from './pages/FrontOfficePayments';
+import FrontOfficeReports from './pages/FrontOfficeReports';
+import FrontOfficeViewPatient from './pages/FrontOfficeViewPatient';
+
+function App() {
+  return (
+    <Router>
+      <Routes>
+        <Route path="/" element={<Home />} />
+        <Route path="/login" element={<Login />} />
+        <Route path="/register" element={<Register />} />
+        <Route path="/patient_dashboard" element={<PatientDashboard />} />
+        <Route path="/add_family_member" element={<AddFamilyMember />} />
+        <Route path="/edit_family_member/:id" element={<EditFamilyMember />} />
+        <Route path="/book_appointment" element={<BookAppointment />} />
+        <Route path="/reschedule_appointment/:id" element={<RescheduleAppointment />} />
+        <Route path="/view_appointment/:id" element={<ViewAppointment />} />
+        <Route path="/view_patient_details/:id" element={<ViewPatientDetails />} />
+        <Route path="/doctor_dashboard" element={<DoctorDashboard />} />
+        <Route path="/doctor_appointments" element={<DoctorAppointments />} />
+        <Route path="/doctor_medical_records" element={<DoctorMedicalRecords />} />
+        <Route path="/doctor_patients" element={<DoctorPatients />} />
+        <Route path="/doctor_prescriptions" element={<DoctorPrescriptions />} />
+        <Route path="/doctor_schedule" element={<DoctorSchedule />} />
+        <Route path="/doctor_view_patient/:id" element={<DoctorViewPatient />} />
+        <Route path="/front_office_dashboard" element={<FrontOfficeDashboard />} />
+        <Route path="/front_office_patient" element={<FrontOfficePatient />} />
+        <Route path="/front_office_checkins" element={<FrontOfficeCheckins />} />
+        <Route path="/front_office_appointments" element={<FrontOfficeAppointments />} />
+        <Route path="/front_office_payments" element={<FrontOfficePayments />} />
+        <Route path="/front_office_reports" element={<FrontOfficeReports />} />
+        <Route path="/front_office_view_patient/:id" element={<FrontOfficeViewPatient />} />
+      </Routes>
+    </Router>
+  );
+}
+
+export default App;
