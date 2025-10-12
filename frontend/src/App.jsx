@@ -23,6 +23,13 @@ import FrontOfficeAppointments from './pages/FrontOfficeAppointments';
 import FrontOfficePayments from './pages/FrontOfficePayments';
 import FrontOfficeReports from './pages/FrontOfficeReports';
 import FrontOfficeViewPatient from './pages/FrontOfficeViewPatient';
+// import LoginWithUID from './pages/LoginWithUID';
+// import LoginWithCredentials from './pages/LoginWithCredentials';
+// import Landing from './pages/Landing';
+// Add this import
+import FrontOfficeRegister from './pages/FrontOfficeRegister';
+// import AdminDashboard from './pages/AdminDashboard';
+
 
 function App() {
   return (
@@ -31,9 +38,12 @@ function App() {
         <Route path="/" element={<Home />} />
         <Route path="/login" element={<Login />} />
         <Route path="/register" element={<Register />} />
+        {/* <Route path="/login-with-uid" element={<LoginWithUID />} />
+        <Route path="/login-with-credentials" element={<LoginWithCredentials />} />
+        <Route path="/" element={<Landing />} /> */}
         <Route path="/patient_dashboard" element={<PatientDashboard />} />
         <Route path="/add_family_member" element={<AddFamilyMember />} />
-        <Route path="/edit_family_member/:id" element={<EditFamilyMember />} />
+        <Route path="/edit_family_member/:memberId" element={<EditFamilyMember />} />
         <Route path="/book_appointment" element={<BookAppointment />} />
         <Route path="/reschedule_appointment/:id" element={<RescheduleAppointment />} />
         <Route path="/view_appointment/:id" element={<ViewAppointment />} />
@@ -43,6 +53,7 @@ function App() {
         <Route path="/doctor_medical_records" element={<DoctorMedicalRecords />} />
         <Route path="/doctor_patients" element={<DoctorPatients />} />
         <Route path="/doctor_prescriptions" element={<DoctorPrescriptions />} />
+        <Route path="/doctor_prescriptions/:id" element={<DoctorPrescriptions />} />
         <Route path="/doctor_schedule" element={<DoctorSchedule />} />
         <Route path="/doctor_view_patient/:id" element={<DoctorViewPatient />} />
         <Route path="/front_office_dashboard" element={<FrontOfficeDashboard />} />
@@ -52,6 +63,10 @@ function App() {
         <Route path="/front_office_payments" element={<FrontOfficePayments />} />
         <Route path="/front_office_reports" element={<FrontOfficeReports />} />
         <Route path="/front_office_view_patient/:id" element={<FrontOfficeViewPatient />} />
+        
+// Add this route to your Routes
+        <Route path="/front_office_register" element={<FrontOfficeRegister />} />
+        {/* <Route path="/admin_dashboard" element={<AdminDashboard />} /> */}
       </Routes>
     </Router>
   );

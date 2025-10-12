@@ -4,19 +4,19 @@ import { logout } from '../services/api';
 const Navbar = ({ isDashboard = false, userName = '', userType = '' }) => {
   const navigate = useNavigate();
 
-  const handleLogout = async () => {
-    try {
-      await logout();
-      navigate('/');
-    } catch (error) {
-      console.error(error);
-    }
-  };
+const handleLogout = async () => {
+  try {
+    await logout();
+    navigate('/');
+  } catch (error) {
+    console.error('Logout failed:', error.response?.data || error.message || error);
+  }
+};
 
   return (
     <nav className={`fixed top-0 left-0 w-full z-50 shadow-md ${isDashboard ? 'bg-gradient-to-r from-blue-600 to-blue-500 text-white' : 'bg-white'}`}>
       <div className="container mx-auto px-4 py-3 flex justify-between items-center">
-        <a className="font-bold text-xl text-blue-600" href="/">FamilyCare Connect</a>
+        <a className={`font-bold text-xl ${isDashboard ? 'text-white' : 'text-blue-600'}`} href="/">FamilyCare Connect</a>
         {!isDashboard ? (
           <div className="flex space-x-4">
             <a href="#about" className="text-gray-600 hover:text-blue-600" onClick={(e) => { e.preventDefault(); document.getElementById('about')?.scrollIntoView({ behavior: 'smooth' }); }}>About</a>

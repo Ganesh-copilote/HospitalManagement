@@ -29,10 +29,10 @@ const ViewAppointment = () => {
           <h2 className="text-2xl font-bold text-center mb-6">Appointment Details</h2>
           {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
           <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-            <p><strong>Member:</strong> {appointment.member_name}</p>
+            <p><strong>Member:</strong> {appointment.first_name} {appointment.last_name}</p>
             <p><strong>Doctor:</strong> {appointment.doctor_name}</p>
-            <p><strong>Date:</strong> {appointment.date}</p>
-            <p><strong>Time:</strong> {appointment.time}</p>
+            <p><strong>Date:</strong> {appointment.slot_time}</p>
+            {/* <p><strong>Time:</strong> {appointment.slot_time}</p> */}
             <p><strong>Status:</strong> {appointment.status}</p>
             {appointment.status === 'Scheduled' && (
               <div className="col-span-2">

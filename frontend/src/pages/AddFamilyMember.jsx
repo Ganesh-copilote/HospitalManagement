@@ -1,13 +1,16 @@
-import { useState } from 'react';
-import { useNavigate } from 'react-router-dom';
+import { useState, useEffect } from 'react';
+import { useNavigate, Link } from 'react-router-dom';
 import { addFamilyMember } from '../services/api';
 import Navbar from '../components/Navbar';
+import ScrollToTop from '../components/ScrollToTop';
+import Breadcrumb from '../components/Breadcrumb';
 
 const AddFamilyMember = () => {
   const [formData, setFormData] = useState({
     first_name: '', last_name: '', phone: '', email: '', age: '', gender: '', aadhar: '', address: '', prev_problem: '', curr_problem: ''
   });
   const [error, setError] = useState('');
+  const [showScrollTop, setShowScrollTop] = useState(false);
   const navigate = useNavigate();
 
   const handleChange = (e) => {
@@ -24,10 +27,39 @@ const AddFamilyMember = () => {
     }
   };
 
+  // ✅ Show scroll-to-top button when user scrolls down
+  useEffect(() => {
+    const handleScroll = () => {
+      setShowScrollTop(window.scrollY > 300);
+    };
+    window.addEventListener('scroll', handleScroll);
+    return () => window.removeEventListener('scroll', handleScroll);
+  }, []);
+
+  // ✅ Scroll to top smoothly
+  const scrollToTop = () => {
+    window.scrollTo({ top: 0, behavior: 'smooth' });
+  };
+
   return (
     <>
       <Navbar isDashboard={true} userType="patient" />
-      <div className="container mx-auto pt-20 px-4">
+      <Breadcrumb />
+
+      {/* ✅ Custom breadcrumb for navigation */}
+      <div className="container mx-auto pt-24 px-4">
+        <nav className="text-gray-600 mb-4 text-sm">
+          <ul className="flex items-center space-x-2">
+            <li>
+              <Link to="/patient_dashboard" className="text-blue-600 hover:underline">Dashboard</Link>
+            </li>
+          
+          
+            <li>/</li>
+            <li className="text-gray-500">Add Family Member</li>
+          </ul>
+        </nav>
+
         <div className="bg-white rounded-2xl shadow-xl max-w-4xl w-full mx-auto p-10">
           <h2 className="text-2xl font-bold text-center mb-6">Add Family Member</h2>
           {error && <div className="bg-red-100 text-red-700 p-3 rounded mb-4">{error}</div>}
@@ -82,6 +114,19 @@ const AddFamilyMember = () => {
           </form>
         </div>
       </div>
+
+      {/* ✅ Scroll-to-top button */}
+      {showScrollTop && (
+        <button
+          onClick={scrollToTop}
+          className="fixed bottom-6 right-6 bg-blue-600 text-white p-3 rounded-full shadow-lg hover:bg-blue-700 transition-all"
+          aria-label="Scroll to top"
+        >
+          <i className="bi bi-arrow-up"></i>
+        </button>
+      )}
+
+      <ScrollToTop />
     </>
   );
 };

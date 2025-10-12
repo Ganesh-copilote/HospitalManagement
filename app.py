@@ -11,7 +11,7 @@ app.config['SECRET_KEY'] = 'your-secret-key-12345'
 app.config['SQLALCHEMY_DATABASE_URI'] = 'sqlite:///hospital.db'
 app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 app.config['UPLOAD_FOLDER'] = 'static/uploads'
-CORS(app, supports_credentials=True, resources={r"/*": {"origins": "http://localhost:3000"}})
+# CORS(app, supports_credentials=True, resources={r"/*": {"origins": "http://localhost:3000"}})
 
 db = SQLAlchemy(app)
 
