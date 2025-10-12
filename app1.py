@@ -1,5 +1,5 @@
 from datetime import datetime, timedelta
-from enum import member
+from enum import Enum
 import hashlib
 from flask import Flask, flash, json, jsonify, request, redirect, url_for, render_template, session
 import sqlite3
@@ -31,7 +31,7 @@ app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__fil
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE}'
-DATABASE = r'C:\Users\ADMIN\Documents\Truvisory\SMB (3)\SMB\hospital1.db'
+DATABASE = r'C:\HospitalManagement\HospitalManagement\hospital1.db'
 
 # ✅ Session + CORS configuration for React localhost
 # app.config['SESSION_COOKIE_DOMAIN'] = None
@@ -56,6 +56,95 @@ from flask import make_response
 # Add these imports at the top
 import hashlib
 from werkzeug.security import generate_password_hash, check_password_hash
+
+@app.route('/api/available_slots', methods=['GET'])
+def api_available_slots():
+    print("=== /api/available_slots GET endpoint called ===")
+   
+    doctor_id = request.args.get('doctor_id')
+    date = request.args.get('date')
+   
+    print(f"🔍 Request parameters - Doctor: {doctor_id}, Date: {date}")
+   
+    if not doctor_id or not date:
+        error_msg = 'Doctor ID and date are required'
+        print(f"❌ Missing parameters: {error_msg}")
+        return jsonify({'error': error_msg}), 400
+
+    try:
+        # Validate date format
+        datetime.strptime(date, '%Y-%m-%d')
+        start_datetime = f"{date} 00:00:00"
+        end_datetime = f"{date} 23:59:59"
+        print(f"📅 Fetching slots for date range: {start_datetime} to {end_datetime}")
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # Verify doctor exists
+        c.execute('SELECT id, name, specialty FROM doctors WHERE id = ?', (doctor_id,))
+        doctor = c.fetchone()
+        if not doctor:
+            error_msg = f"Doctor ID {doctor_id} not found"
+            print(f"❌ {error_msg}")
+            return jsonify({'error': error_msg}), 404
+
+        print(f"👨‍⚕️ Doctor found: {doctor['name']} (ID: {doctor_id}, Specialty: {doctor['specialty']})")
+
+        # Check all slots for the doctor and date
+        c.execute('SELECT id, slot_time FROM slots WHERE doctor_id = ? AND slot_time BETWEEN ? AND ?', 
+                 (doctor_id, start_datetime, end_datetime))
+        all_slots = c.fetchall()
+        print(f"📋 All slots for doctor {doctor_id} on {date}: {all_slots}")
+
+        # Get available slots
+        c.execute('''SELECT s.id, s.slot_time, d.name as doctor_name, d.specialty
+                     FROM slots s
+                     JOIN doctors d ON s.doctor_id = d.id
+                     WHERE s.doctor_id = ?
+                     AND s.slot_time BETWEEN ? AND ?
+                     AND s.id NOT IN (
+                         SELECT slot_id FROM appointments WHERE status IN ('Scheduled', 'Confirmed')
+                     )
+                     ORDER BY s.slot_time''',
+                 (doctor_id, start_datetime, end_datetime))
+       
+        slots_data = c.fetchall()
+        print(f"📋 Raw available slots: {slots_data}")
+        slots = [dict(row) for row in slots_data]
+       
+        print(f"✅ Found {len(slots)} available slots")
+       
+        # Format the slots for frontend
+        formatted_slots = []
+        for slot in slots:
+            try:
+                dt = datetime.strptime(slot['slot_time'], '%Y-%m-%d %H:%M:%S')
+                formatted_slots.append({
+                    'id': slot['id'],
+                    'slot_time': slot['slot_time'],
+                    'display': dt.strftime('%H:%M'),
+                    'date': dt.strftime('%Y-%m-%d'),
+                    'time': dt.strftime('%H:%M'),
+                    'doctor_name': slot['doctor_name'],
+                    'specialty': slot['specialty']
+                })
+            except Exception as e:
+                print(f"⚠️ Error formatting slot {slot}: {e}")
+                formatted_slots.append(slot)
+        
+        conn.close()
+        print(f"📤 Returning {len(formatted_slots)} formatted slots: {formatted_slots}")
+        return jsonify(formatted_slots)
+    
+    except ValueError as ve:
+        print(f"❌ Invalid date format: {str(ve)}")
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+    except Exception as e:
+        print(f"❌ ERROR in available slots API: {str(e)}")
+        traceback.print_exc()
+        return jsonify({'error': 'Failed to load available slots'}), 500
+
 
 # Update the registration endpoint
 @app.route('/api/register', methods=['POST'])
@@ -5432,101 +5521,16 @@ def patient_medical_records():
 #     message = request.args.get('message', '')
 #     return render_template('login.html', message=message)
 # In your main Flask app file (app.py or similar)
-from flask import Flask, request, jsonify
-from datetime import datetime
-from flask import Flask, request, jsonify
-from datetime import datetime
+# from flask import Flask, request, jsonify
+# from datetime import datetime
+# from flask import Flask, request, jsonify
+# from datetime import datetime
 import traceback
 
 # Add this to app1.py
-@app.route('/api/available_slots', methods=['GET'])
-def api_available_slots():
-    print("=== /api/available_slots GET endpoint called ===")
-   
-    doctor_id = request.args.get('doctor_id')
-    date = request.args.get('date')
-   
-    print(f"🔍 Request parameters - Doctor: {doctor_id}, Date: {date}")
-   
-    if not doctor_id or not date:
-        error_msg = 'Doctor ID and date are required'
-        print(f"❌ Missing parameters: {error_msg}")
-        return jsonify({'error': error_msg}), 400
 
-    try:
-        # Validate date format
-        datetime.strptime(date, '%Y-%m-%d')
-        start_datetime = f"{date} 00:00:00"
-        end_datetime = f"{date} 23:59:59"
-        print(f"📅 Fetching slots for date range: {start_datetime} to {end_datetime}")
 
-        conn = get_db()
-        c = conn.cursor()
 
-        # Verify doctor exists
-        c.execute('SELECT id, name, specialty FROM doctors WHERE id = ?', (doctor_id,))
-        doctor = c.fetchone()
-        if not doctor:
-            error_msg = f"Doctor ID {doctor_id} not found"
-            print(f"❌ {error_msg}")
-            return jsonify({'error': error_msg}), 404
-
-        print(f"👨‍⚕️ Doctor found: {doctor['name']} (ID: {doctor_id}, Specialty: {doctor['specialty']})")
-
-        # Check all slots for the doctor and date
-        c.execute('SELECT id, slot_time, is_available FROM slots WHERE doctor_id = ? AND slot_time BETWEEN ? AND ?', 
-                 (doctor_id, start_datetime, end_datetime))
-        all_slots = c.fetchall()
-        print(f"📋 All slots for doctor {doctor_id} on {date}: {all_slots}")
-
-        # Get available slots
-        c.execute('''SELECT s.id, s.slot_time, d.name as doctor_name, d.specialty
-                     FROM slots s
-                     JOIN doctors d ON s.doctor_id = d.id
-                     WHERE s.doctor_id = ?
-                     AND s.slot_time BETWEEN ? AND ?
-                     AND s.is_available = 1
-                     AND s.id NOT IN (
-                         SELECT slot_id FROM appointments WHERE status IN ('Scheduled', 'Confirmed')
-                     )
-                     ORDER BY s.slot_time''',
-                 (doctor_id, start_datetime, end_datetime))
-       
-        slots_data = c.fetchall()
-        print(f"📋 Raw available slots: {slots_data}")
-        slots = [dict(row) for row in slots_data]
-       
-        print(f"✅ Found {len(slots)} available slots")
-       
-        # Format the slots for frontend
-        formatted_slots = []
-        for slot in slots:
-            try:
-                dt = datetime.strptime(slot['slot_time'], '%Y-%m-%d %H:%M:%S')
-                formatted_slots.append({
-                    'id': slot['id'],
-                    'slot_time': slot['slot_time'],
-                    'display': dt.strftime('%H:%M'),
-                    'date': dt.strftime('%Y-%m-%d'),
-                    'time': dt.strftime('%H:%M'),
-                    'doctor_name': slot['doctor_name'],
-                    'specialty': slot['specialty']
-                })
-            except Exception as e:
-                print(f"⚠️ Error formatting slot {slot}: {e}")
-                formatted_slots.append(slot)
-        
-        conn.close()
-        print(f"📤 Returning {len(formatted_slots)} formatted slots: {formatted_slots}")
-        return jsonify(formatted_slots)
-    
-    except ValueError as ve:
-        print(f"❌ Invalid date format: {str(ve)}")
-        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
-    except Exception as e:
-        print(f"❌ ERROR in available slots API: {str(e)}")
-        traceback.print_exc()
-        return jsonify({'error': 'Failed to load available slots'}), 500
 @app.route('/view_appointment/<int:appointment_id>')
 def view_appointment(appointment_id):
     if 'family_id' not in session or session.get('user_type') not in ['patient', 'doctor', 'front_office']:

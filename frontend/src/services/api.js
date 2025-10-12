@@ -23,13 +23,13 @@ const handleError = (error) => {
 export const login = async (data) => {
   debugger;
   try {
-    let res;    
+    let res;
     if (data.family_id) {
       res = await api.post('/api/login', { family_id: data.family_id });
     } else if (data.identifier && data.password) {
-      res = await api.post('/api/login', { 
-        identifier: data.identifier, 
-        password: data.password 
+      res = await api.post('/api/login', {
+        identifier: data.identifier,
+        password: data.password
       });
     } else {
       throw new Error('Invalid login data');
@@ -273,8 +273,8 @@ export const initiatePayment = async (billId) => {
 export const verifyPayment = async (paymentId, billId) => {
   try {
     console.log(`🔄 Frontend: Verifying payment ${paymentId} for bill ${billId}`);
-    const response = await api.post(`/api/verify_payment/${paymentId}`, { 
-      bill_id: billId 
+    const response = await api.post(`/api/verify_payment/${paymentId}`, {
+      bill_id: billId
     });
     console.log('✅ Frontend: Verify payment response:', response.data);
     return response.data;

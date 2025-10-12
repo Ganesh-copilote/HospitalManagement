@@ -31,6 +31,7 @@ import FrontOfficeRegister from './pages/FrontOfficeRegister';
 // import AdminDashboard from './pages/ad';
 import AdminDashboard from './pages/AdminDashboard';
 
+
 function App() {
   return (
     <Router>
@@ -63,7 +64,7 @@ function App() {
         <Route path="/front_office_payments" element={<FrontOfficePayments />} />
         <Route path="/front_office_reports" element={<FrontOfficeReports />} />
         <Route path="/front_office_view_patient/:id" element={<FrontOfficeViewPatient />} />
-        
+
 // Add this route to your Routes
         <Route path="/front_office_register" element={<FrontOfficeRegister />} />
         <Route path="/admin_dashboard" element={<AdminDashboard />} />
