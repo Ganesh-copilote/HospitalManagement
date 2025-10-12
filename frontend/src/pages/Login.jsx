@@ -59,7 +59,7 @@ const Login = () => {
       'patient': '/patient_dashboard',
       'doctor': '/doctor_dashboard',
       'front_office': '/front_office_dashboard',
-      'admin': '/AdminDashboard'
+      'admin': '/admin'
     };
     navigate(routes[userType] || '/');
   };

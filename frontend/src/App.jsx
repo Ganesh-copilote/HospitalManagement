@@ -28,8 +28,8 @@ import FrontOfficeViewPatient from './pages/FrontOfficeViewPatient';
 // import Landing from './pages/Landing';
 // Add this import
 import FrontOfficeRegister from './pages/FrontOfficeRegister';
-// import AdminDashboard from './pages/AdminDashboard';
-
+// import AdminDashboard from './pages/ad';
+import AdminDashboard from './pages/AdminDashboard';
 
 function App() {
   return (
@@ -66,7 +66,7 @@ function App() {
         
 // Add this route to your Routes
         <Route path="/front_office_register" element={<FrontOfficeRegister />} />
-        {/* <Route path="/admin_dashboard" element={<AdminDashboard />} /> */}
+        <Route path="/admin_dashboard" element={<AdminDashboard />} />
       </Routes>
     </Router>
   );

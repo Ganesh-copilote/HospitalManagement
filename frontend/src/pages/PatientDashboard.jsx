@@ -14,6 +14,7 @@ import Navbar from '../components/Navbar';
 import Modal from '../components/Modal';
 
 const PatientDashboard = () => {
+  debugger
   const [data, setData] = useState({
     profile: {}, family_members: [], appointments: [], medical_records: [], bills: [], family_id: ''
   });

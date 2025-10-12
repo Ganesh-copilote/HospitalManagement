@@ -66,6 +66,7 @@ const BookAppointment = () => {
 
   // ---------- Scroll-To-Top ----------
   useEffect(() => {
+    debugger
     const handleScroll = () => setShowScroll(window.scrollY > 300);
     window.addEventListener('scroll', handleScroll);
     return () => window.removeEventListener('scroll', handleScroll);
@@ -86,6 +87,7 @@ const BookAppointment = () => {
 
   // ---------- Handle Reschedule ----------
   useEffect(() => {
+    debugger
     const searchParams = new URLSearchParams(location.search);
     const appointmentId = searchParams.get('appointment_id');
     const memberId = searchParams.get('member_id');
@@ -134,6 +136,7 @@ const BookAppointment = () => {
         try {
           setError('');
           const slots = await getAvailableSlots(formData.doctor_id, formData.date);
+          debugger
           setData(prev => ({ ...prev, available_slots: slots }));
         } catch {
           setError('Failed to load available slots');

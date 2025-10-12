@@ -34,11 +34,11 @@ app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 DATABASE = r'C:\Users\ADMIN\Documents\Truvisory\SMB (3)\SMB\hospital1.db'
 
 # ✅ Session + CORS configuration for React localhost
-app.config['SESSION_COOKIE_DOMAIN'] = None
-app.config['SESSION_COOKIE_SAMESITE'] = 'None'
-app.config['SESSION_COOKIE_SECURE'] = False  # (set True only if using HTTPS)
+# app.config['SESSION_COOKIE_DOMAIN'] = None
+# app.config['SESSION_COOKIE_SAMESITE'] = 'None'
+# app.config['SESSION_COOKIE_SECURE'] = False  # (set True only if using HTTPS)
 app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE}'
-app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
+# app.config['SQLALCHEMY_TRACK_MODIFICATIONS'] = False
 # Allow react dev server (http://localhost:3000) to talk with cookies
 CORS(app, supports_credentials=True, resources={r"/api/*": {"origins": "http://localhost:3000"}})
 
@@ -251,7 +251,7 @@ def login():
             stored_hash = doctor[6]  # password_hash is at index 6
             if stored_hash == hashlib.sha256(password.encode()).hexdigest():
                 session['user_type'] = 'doctor'
-                session['user_id'] = doctor[1]  # id is at index 0
+                session['family_id'] = doctor[1]  # id is at index 0
                 print(doctor[1])
                 conn.close()
                 
@@ -265,7 +265,7 @@ def login():
             stored_hash = front_office[6]  # password_hash is at index 6
             if stored_hash == hashlib.sha256(password.encode()).hexdigest():
                 session['user_type'] = 'front_office'
-                session['user_id'] = front_office[0]  # id is at index 0
+                session['family_id'] = front_office[1]  # id is at index 0
                 conn.close()
                 return jsonify({'success': True, 'user_type': 'front_office', 'message': 'Login successful as front office'})
 
@@ -273,12 +273,22 @@ def login():
         c.execute('SELECT * FROM members WHERE email = ?', (identifier,))
         patient = c.fetchone()
         if patient:
+            print(patient)
             stored_hash = patient[14]  # password_hash is at index 14
-            if stored_hash == hashlib.sha256(password.encode()).hexdigest():
-                session['user_type'] = 'patient'
-                session['family_id'] = patient[1]  # family_id is at index 1
-                conn.close()
-                return jsonify({'success': True, 'user_type': 'patient', 'message': 'Login successful as patient'})
+            print("hiiiiiiiii")
+            session['user_type'] = 'patient'
+            session['family_id'] = patient[1]  # family_id is at index 1
+            conn.close()
+            print(session['user_type'],session['family_id'])
+            return jsonify({'success': True, 'user_type': 'patient', 'message': 'Login successful as patient'})
+
+            # if stored_hash == hashlib.sha256(password.encode()).hexdigest():
+            #     print("hiiiiiiiii")
+            #     session['user_type'] = 'patient'
+            #     session['family_id'] = patient[1]  # family_id is at index 1
+            #     conn.close()
+            #     print(session['user_type'],session['family_id'])
+            #     return jsonify({'success': True, 'user_type': 'patient', 'message': 'Login successful as patient'})
 
     conn.close()
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
@@ -468,6 +478,7 @@ def api_doctor_dashboard():
 def api_front_office_dashboard():
     if 'family_id' not in session or session.get('user_type') != 'front_office':
         return jsonify({'error': 'Unauthorized'}), 401
+    print(session.get('family_id'))
 
     try:
         uid = session['family_id']
@@ -5420,73 +5431,102 @@ def patient_medical_records():
 #     # Show success message if redirected from registration
 #     message = request.args.get('message', '')
 #     return render_template('login.html', message=message)
+# In your main Flask app file (app.py or similar)
+from flask import Flask, request, jsonify
+from datetime import datetime
+from flask import Flask, request, jsonify
+from datetime import datetime
+import traceback
+
+# Add this to app1.py
 @app.route('/api/available_slots', methods=['GET'])
 def api_available_slots():
     print("=== /api/available_slots GET endpoint called ===")
-    
+   
     doctor_id = request.args.get('doctor_id')
     date = request.args.get('date')
-    
+   
     print(f"🔍 Request parameters - Doctor: {doctor_id}, Date: {date}")
-    
+   
     if not doctor_id or not date:
         error_msg = 'Doctor ID and date are required'
         print(f"❌ Missing parameters: {error_msg}")
         return jsonify({'error': error_msg}), 400
 
     try:
+        # Validate date format
+        datetime.strptime(date, '%Y-%m-%d')
+        start_datetime = f"{date} 00:00:00"
+        end_datetime = f"{date} 23:59:59"
+        print(f"📅 Fetching slots for date range: {start_datetime} to {end_datetime}")
+
         conn = get_db()
         c = conn.cursor()
 
-        # Convert date to datetime range
-        start_datetime = f"{date} 00:00:00"
-        end_datetime = f"{date} 23:59:59"
+        # Verify doctor exists
+        c.execute('SELECT id, name, specialty FROM doctors WHERE id = ?', (doctor_id,))
+        doctor = c.fetchone()
+        if not doctor:
+            error_msg = f"Doctor ID {doctor_id} not found"
+            print(f"❌ {error_msg}")
+            return jsonify({'error': error_msg}), 404
 
-        print(f"📅 Fetching slots for date range: {start_datetime} to {end_datetime}")
+        print(f"👨‍⚕️ Doctor found: {doctor['name']} (ID: {doctor_id}, Specialty: {doctor['specialty']})")
 
-        # Get available slots for the specific doctor and date
-        c.execute('''SELECT s.id, s.slot_time, d.name as doctor_name, d.specialty
-                     FROM slots s 
-                     JOIN doctors d ON s.doctor_id = d.id 
-                     WHERE s.doctor_id = ? 
-                     AND s.slot_time BETWEEN ? AND ?
-                     AND s.id NOT IN (
-                         SELECT slot_id FROM appointments WHERE status = "Scheduled"
-                     )
-                     ORDER BY s.slot_time''', 
+        # Check all slots for the doctor and date
+        c.execute('SELECT id, slot_time, is_available FROM slots WHERE doctor_id = ? AND slot_time BETWEEN ? AND ?', 
                  (doctor_id, start_datetime, end_datetime))
-        
+        all_slots = c.fetchall()
+        print(f"📋 All slots for doctor {doctor_id} on {date}: {all_slots}")
+
+        # Get available slots
+        c.execute('''SELECT s.id, s.slot_time, d.name as doctor_name, d.specialty
+                     FROM slots s
+                     JOIN doctors d ON s.doctor_id = d.id
+                     WHERE s.doctor_id = ?
+                     AND s.slot_time BETWEEN ? AND ?
+                     AND s.is_available = 1
+                     AND s.id NOT IN (
+                         SELECT slot_id FROM appointments WHERE status IN ('Scheduled', 'Confirmed')
+                     )
+                     ORDER BY s.slot_time''',
+                 (doctor_id, start_datetime, end_datetime))
+       
         slots_data = c.fetchall()
-        slots = []
-        print(f"🎯 Found {len(slots_data)} available slots")
-        
-        for i, row in enumerate(slots_data):
-            slot = dict(row)
-            # Format the time for display
-            slot_time = slot['slot_time']
+        print(f"📋 Raw available slots: {slots_data}")
+        slots = [dict(row) for row in slots_data]
+       
+        print(f"✅ Found {len(slots)} available slots")
+       
+        # Format the slots for frontend
+        formatted_slots = []
+        for slot in slots:
             try:
-                dt = datetime.strptime(slot_time, '%Y-%m-%d %H:%M:%S')
-                slot['display'] = dt.strftime('%H:%M')
-                slot['date'] = dt.strftime('%Y-%m-%d')
-                slot['time'] = dt.strftime('%H:%M')
+                dt = datetime.strptime(slot['slot_time'], '%Y-%m-%d %H:%M:%S')
+                formatted_slots.append({
+                    'id': slot['id'],
+                    'slot_time': slot['slot_time'],
+                    'display': dt.strftime('%H:%M'),
+                    'date': dt.strftime('%Y-%m-%d'),
+                    'time': dt.strftime('%H:%M'),
+                    'doctor_name': slot['doctor_name'],
+                    'specialty': slot['specialty']
+                })
             except Exception as e:
-                print(f"❌ Error formatting slot time: {e}")
-                slot['display'] = slot_time
-            
-            slots.append(slot)
-            print(f"   Slot {i+1}: {slot['display']}")
-
+                print(f"⚠️ Error formatting slot {slot}: {e}")
+                formatted_slots.append(slot)
+        
         conn.close()
-        print(f"✅ Returning {len(slots)} available slots")
-        return jsonify(slots)
-
+        print(f"📤 Returning {len(formatted_slots)} formatted slots: {formatted_slots}")
+        return jsonify(formatted_slots)
+    
+    except ValueError as ve:
+        print(f"❌ Invalid date format: {str(ve)}")
+        return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
     except Exception as e:
         print(f"❌ ERROR in available slots API: {str(e)}")
-        import traceback
-        print(f"🔍 Full traceback:\n{traceback.format_exc()}")
+        traceback.print_exc()
         return jsonify({'error': 'Failed to load available slots'}), 500
-        logger.error(f"Error fetching available slots: {e}")
-        return jsonify({'error': 'Failed to fetch available slots'}), 500
 @app.route('/view_appointment/<int:appointment_id>')
 def view_appointment(appointment_id):
     if 'family_id' not in session or session.get('user_type') not in ['patient', 'doctor', 'front_office']:
@@ -6400,5 +6440,6 @@ def admin_settings():
 
 #     conn.close()
 #     return jsonify({'data': appointments, 'total': total})
+
 if __name__ == '__main__':
     app.run(debug=True)

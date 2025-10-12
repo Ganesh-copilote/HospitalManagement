@@ -176,19 +176,20 @@ export const bookAppointment = async (data) => {
     throw handleError(error);
   }
 };
-
 export const getAvailableSlots = async (doctorId, date) => {
+  debugger
   try {
-    console.log(`🔄 Frontend: Calling /api/available_slots?doctor_id=${doctorId}&date=${date}`);
-    const response = await api.get(`/api/available_slots?doctor_id=${doctorId}&date=${date}`);
-    console.log('✅ Frontend: Available slots response:', response.data);
-    return response.data;
+    console.log(`Fetching available slots for doctorId=${doctorId}, date=${date}`);
+    const res = await api.get('http://127.0.0.1:5000/api/available_slots', {
+      params: { doctor_id: doctorId, date: date }
+    });
+    console.log('Available slots response:', res.data);
+    return res.data;
   } catch (error) {
-    console.error('❌ Frontend: Available slots API call failed:', error);
-    throw handleError(error);
+    console.error('Error fetching available slots:', error.response?.data || error);
+    throw new Error(error.response?.data?.error || 'Failed to load available slots');
   }
 };
-
 
 export const getAppointment = async (id) => {
   try {
@@ -235,6 +236,7 @@ export const cancelAppointment = async (id) => {
 };
 
 export const uploadMedicalRecord = async (formData) => {
+  debugger
   try {
     const res = await api.post('/api/upload_medical_record', formData, {
       headers: { 'Content-Type': 'multipart/form-data' },
