@@ -85,6 +85,7 @@ export const frontOfficeRegister = async (data) => {
 // Keep other existing exports unchanged
 
 export const logout = async () => {
+  debugger
   try {
     const res = await api.get('/logout');
     return res.data;
@@ -248,6 +249,7 @@ export const uploadMedicalRecord = async (formData) => {
 };
 
 export const deleteMedicalRecord = async (id) => {
+  debugger
   try {
     console.log(`🔄 Deleting medical record with ID: ${id}`);
     const res = await api.delete(`/api/delete_medical_record/${id}`);
@@ -522,6 +524,54 @@ export const markBillAsPaid = async (billId) => {
     return response.data;
   } catch (error) {
     console.error('❌ Frontend: Mark bill as paid API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+
+
+export const AdminDashboard = async () => {
+  try {
+    const res = await api.get('/api/admin_dashboard');
+    console.log(res.data)
+    return res.data;
+  } catch (error) {
+    throw handleError(error);
+  }
+};
+
+
+export const getAdminPatientData = async (id) => {
+  try {
+    debugger
+    const res = await api.get(`/api/admin/getpatientdata`);
+    console.log("data come api.js", res.data)
+    return res.data;
+  } catch (error) {
+    throw handleError(error);
+  }
+};
+
+export const getAdminDoctordata = async (id) => {
+  try {
+    debugger
+    const res = await api.get(`/api/admin/getdoctordata`);
+    console.log("data come api.js", res.data)
+    return res.data;
+  } catch (error) {
+    throw handleError(error);
+  }
+};
+
+
+export const getAdminFrontOfficedata = async (id) => {
+  debugger
+  try {
+    debugger
+    const res = await api.get(`/api/admin/front_office_data`);
+    console.log("data come api.js", res.data)
+    return res.data;
+  } catch (error) {
     throw handleError(error);
   }
 };

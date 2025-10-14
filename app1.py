@@ -8,6 +8,7 @@ import os
 import logging
 from datetime import datetime, timedelta
 from werkzeug.utils import secure_filename
+import time
 
 
 from flask_admin import Admin
@@ -146,6 +147,161 @@ def api_available_slots():
         traceback.print_exc()
         return jsonify({'error': 'Failed to load available slots'}), 500
     
+
+
+
+@app.route('/api/upload_medical_record', methods=['POST'])
+def upload_medical_record():
+    try:
+        if 'family_id' not in session or session.get('user_type') != 'patient':
+            return jsonify({'error': 'Unauthorized'}), 401
+
+        member_id = request.form.get('member_id')
+        record_type = request.form.get('record_type')
+        record_date = request.form.get('record_date')
+        description = request.form.get('description')
+        file = request.files.get('record_file')
+
+        if not member_id or not record_type or not record_date:
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        file_path = None
+        if file and file.filename != '':
+            # Create uploads directory if it doesn't exist
+            upload_dir = 'uploads'
+            if not os.path.exists(upload_dir):
+                os.makedirs(upload_dir)
+            
+            # Generate unique filename
+            filename = secure_filename(file.filename)
+            unique_filename = f"medical_record_{member_id}_{int(time.time())}_{filename}"
+            file_path = os.path.join(upload_dir, unique_filename)
+            
+            # Save the file
+            file.save(file_path)
+
+        conn = get_db()
+        c = conn.cursor()
+        
+        c.execute('''INSERT INTO medical_records 
+                     (member_id, record_type, record_date, description, file_path) 
+                     VALUES (?, ?, ?, ?, ?)''',
+                  (member_id, record_type, record_date, description, file_path))
+        conn.commit()
+        conn.close()
+
+        return jsonify({'success': True, 'message': 'Medical record uploaded successfully'})
+
+    except Exception as e:
+        logger.error(f"Error uploading medical record: {e}")
+        return jsonify({'error': 'Failed to upload medical record'}), 500
+
+
+from flask import send_file
+import sqlite3
+
+# Route to view medical record file
+@app.route('/api/view_medical_record/<int:record_id>')
+def view_medical_record(record_id):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Get the file path from the database
+        c.execute('''SELECT file_path FROM medical_records WHERE id = ?''', (record_id,))
+        record = c.fetchone()
+        
+        if not record or not record['file_path']:
+            return jsonify({'error': 'File not found'}), 404
+        
+        file_path = record['file_path']
+        
+        # Check if file exists
+        if not os.path.exists(file_path):
+            return jsonify({'error': 'File not found on server'}), 404
+        
+        # Send the file
+        return send_file(file_path, as_attachment=False)
+        
+    except Exception as e:
+        logger.error(f"Error viewing medical record: {e}")
+        return jsonify({'error': 'Failed to retrieve file'}), 500
+
+
+@app.route('/logout', methods=['GET'])
+def logout():
+    session.clear()  # Clear all session data
+    return jsonify({'message': 'Logout successful'}), 200
+
+    
+
+
+# Route to delete medical record
+@app.route('/api/delete_medical_record/<int:record_id>', methods=['DELETE'])
+def delete_medical_record(record_id):
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # First get the file path to delete the physical file
+        c.execute('''SELECT file_path FROM medical_records WHERE id = ?''', (record_id,))
+        record = c.fetchone()
+        
+        if record and record['file_path']:
+            file_path = record['file_path']
+            # Delete the physical file if it exists
+            if os.path.exists(file_path):
+                os.remove(file_path)
+        
+        # Delete the record from database
+        c.execute('''DELETE FROM medical_records WHERE id = ?''', (record_id,))
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': 'Medical record deleted successfully'})
+        
+    except Exception as e:
+        logger.error(f"Error deleting medical record: {e}")
+        return jsonify({'error': 'Failed to delete medical record'}), 500
+
+
+
+@app.route('/api/admin_dashboard', methods=['GET'])
+def admin_dashboard():
+    try:
+        conn = get_db()
+        conn.row_factory = sqlite3.Row  # So we can access columns by name
+        c = conn.cursor()
+
+        tables = [
+            'admins',
+            'doctors',
+            'members',
+            'appointments',
+            'slots',
+            'bills',
+            'medical_records',
+            'prescriptions',
+            'checkins',
+            'families',
+            'user_types'
+        ]
+
+        data = {}
+
+        for table in tables:
+            rows = c.execute(f"SELECT * FROM {table}").fetchall()
+            # Convert each row to dict
+            data[table] = [dict(row) for row in rows]
+
+        return jsonify(data)
+
+    except Exception as e:
+        print("Error in admin_dashboard:", e)
+        return jsonify({'error': str(e)}), 500
+
+
+
 # Update the registration endpoint
 @app.route('/api/register', methods=['POST'])
 def api_register():
@@ -329,7 +485,7 @@ def login():
             stored_hash = admin[3]  # password_hash is at index 3
             if stored_hash == hashlib.sha256(password.encode()).hexdigest():
                 session['user_type'] = 'admin'
-                session['user_id'] = admin[0]  # id is at index 0
+                session['family_id'] = admin[1]  # id is at index 0
                 conn.close()
                 return jsonify({'success': True, 'user_type': 'admin', 'message': 'Login successful as admin'})
 
@@ -344,7 +500,7 @@ def login():
                 print(doctor[1])
                 conn.close()
                 
-                print(session['user_type'],session['user_id'])
+                print(session['user_type'],session['family_id'])
                 return jsonify({'success': True, 'user_type': 'doctor', 'message': 'Login successful as doctor'})
 
         # Check front office
@@ -381,6 +537,44 @@ def login():
 
     conn.close()
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
+
+
+
+
+@app.route('/api/admin/front_office_data', methods=['GET'])
+def api_admin_get_frontoffice_data():
+    if 'family_id' not in session or session.get('user_type') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    print("hello")
+    try:
+        uid =session['family_id']
+        print(uid)
+        if not uid:
+            return jsonify({'error': 'family_id parameter is required'}), 400
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # # Get patient profile
+        # c.execute('SELECT * FROM members WHERE family_id = ?', (uid,))
+        # profile = dict(c.fetchone() or {})
+
+        # Get family members
+        c.execute('SELECT * FROM front_office')
+        FrontOffice = [dict(row) for row in c.fetchall()]
+        print("Family members fetched:", FrontOffice)
+
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "FrontOffice": FrontOffice,})
+    except Exception as e:
+        print("Error fetching family members:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+
+
 @app.route('/api/patient_dashboard', methods=['GET'])
 def api_patient_dashboard():
     if 'family_id' not in session or session.get('user_type') != 'patient':
@@ -464,6 +658,75 @@ def api_patient_dashboard():
     except Exception as e:
         logger.error(f"Error in patient dashboard: {e}")
         return jsonify({"success": False, "error": str(e)}), 500
+
+@app.route('/api/admin/getpatientdata', methods=['GET'])
+def api_admin_get_patient_data():
+    if 'family_id' not in session or session.get('user_type') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    print("hello")
+    try:
+        uid =session['family_id']
+        print(uid)
+        if not uid:
+            return jsonify({'error': 'family_id parameter is required'}), 400
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # # Get patient profile
+        # c.execute('SELECT * FROM members WHERE family_id = ?', (uid,))
+        # profile = dict(c.fetchone() or {})
+
+        # Get family members
+        c.execute('SELECT * FROM members')
+        family_members = [dict(row) for row in c.fetchall()]
+        print("Family members fetched:", family_members)
+
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "family_members": family_members,})
+    except Exception as e:
+        print("Error fetching family members:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+
+@app.route('/api/admin/getdoctordata', methods=['GET'])
+def api_admin_get_doctor_data():
+    if 'family_id' not in session or session.get('user_type') != 'admin':
+        return jsonify({'error': 'Unauthorized'}), 401
+    print("hello")
+    try:
+        uid =session['family_id']
+        print(uid)
+        if not uid:
+            return jsonify({'error': 'family_id parameter is required'}), 400
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # # Get patient profile
+        # c.execute('SELECT * FROM members WHERE family_id = ?', (uid,))
+        # profile = dict(c.fetchone() or {})
+
+        # Get family members
+        c.execute('SELECT * FROM Doctors')
+        Doctors = [dict(row) for row in c.fetchall()]
+        print("Family members fetched:", Doctors)
+
+        conn.close()
+
+        return jsonify({
+            "success": True,
+            "Doctors": Doctors,})
+    except Exception as e:
+        print("Error fetching family members:", str(e))
+        return jsonify({'error': str(e)}), 500
+
+
+
+
 
 @app.route('/api/doctor_dashboard')
 def api_doctor_dashboard():
@@ -1066,6 +1329,8 @@ def api_view_appointment(appointment_id):
     except Exception as e:
         logger.error(f"Error in api_view_appointment: {e}")
         return jsonify({'error': 'Failed to view appointment'}), 500
+    
+
 @app.route('/api/reschedule_appointment/<int:appointment_id>', methods=['GET'])
 def api_reschedule_appointment(appointment_id):
     print(f"=== /api/reschedule_appointment/{appointment_id} GET endpoint called ===")
@@ -1129,6 +1394,7 @@ def api_reschedule_appointment(appointment_id):
         import traceback
         print(f"🔍 Full traceback:\n{traceback.format_exc()}")
         return jsonify({'error': 'Failed to load appointment details'}), 500
+    
 @app.route('/api/cancel_appointment/<int:appointment_id>', methods=['DELETE'])
 def api_cancel_appointment(appointment_id):
     if 'family_id' not in session:
@@ -2817,21 +3083,21 @@ def check_table_exists(cursor, table_name):
         logger.error(f"Error checking table {table_name}: {e}")
         return False
 
-@app.route('/api/admin_dashboard')
-def admin_dashboard():
-    conn = get_db()
-    c = conn.cursor()
-    data = {
-        'total_patients': c.execute('SELECT COUNT(*) FROM members').fetchone()[0],
-        'total_doctors': c.execute('SELECT COUNT(*) FROM doctors').fetchone()[0],
-        'today_appointments': c.execute('SELECT COUNT(*) FROM appointments WHERE date = DATE("now")').fetchone()[0],
-        'total_revenue': c.execute('SELECT SUM(amount) FROM bills').fetchone()[0] or 0,
-        'weekly_appointments': [
-            {'day': row['day'], 'count': row['count']}
-            for row in c.execute('SELECT strftime("%w", date) as day, COUNT(*) as count FROM appointments GROUP BY day')
-        ],
-    }
-    return jsonify(data)
+# @app.route('/api/admin_dashboard' , methods=['GET'])
+# def admin_dashboard():
+#     conn = get_db()
+#     c = conn.cursor()
+#     data = {
+#         'total_patients': c.execute('SELECT COUNT(*) FROM members').fetchone()[0],
+#         'total_doctors': c.execute('SELECT COUNT(*) FROM doctors').fetchone()[0],
+#         'today_appointments': c.execute('SELECT COUNT(*) FROM appointments WHERE date = DATE("now")').fetchone()[0],
+#         'total_revenue': c.execute('SELECT SUM(amount) FROM bills').fetchone()[0] or 0,
+#         'weekly_appointments': [
+#             {'day': row['day'], 'count': row['count']}
+#             for row in c.execute('SELECT strftime("%w", date) as day, COUNT(*) as count FROM appointments GROUP BY day')
+#         ],
+#     }
+#     return jsonify(data)
 
 # @app.route('/api/admin/members', methods=['GET'])
 # def admin_members():
@@ -5646,10 +5912,6 @@ def cancel_appointment(appointment_id):
        
 from flask import session, jsonify
 
-@app.route('/logout', methods=['GET'])
-def logout():
-    session.clear()  # Clear all session data
-    return jsonify({'message': 'Logout successful'}), 200
 
 # Add these routes to your app.py
 @app.route('/doctor/medical_records')
@@ -5690,111 +5952,10 @@ def doctor_medical_records():
         logger.error(f"Error in doctor medical records route: {e}")
         return render_template('doctor_medical_records.html', error=f"Failed to load medical records: {str(e)}")
 import os
-from flask import send_file
-import sqlite3
 
-# Route to view medical record file
-@app.route('/api/view_medical_record/<int:record_id>')
-def view_medical_record(record_id):
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # Get the file path from the database
-        c.execute('''SELECT file_path FROM medical_records WHERE id = ?''', (record_id,))
-        record = c.fetchone()
-        
-        if not record or not record['file_path']:
-            return jsonify({'error': 'File not found'}), 404
-        
-        file_path = record['file_path']
-        
-        # Check if file exists
-        if not os.path.exists(file_path):
-            return jsonify({'error': 'File not found on server'}), 404
-        
-        # Send the file
-        return send_file(file_path, as_attachment=False)
-        
-    except Exception as e:
-        logger.error(f"Error viewing medical record: {e}")
-        return jsonify({'error': 'Failed to retrieve file'}), 500
-
-# Route to delete medical record
-@app.route('/api/delete_medical_record/<int:record_id>', methods=['DELETE'])
-def delete_medical_record(record_id):
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # First get the file path to delete the physical file
-        c.execute('''SELECT file_path FROM medical_records WHERE id = ?''', (record_id,))
-        record = c.fetchone()
-        
-        if record and record['file_path']:
-            file_path = record['file_path']
-            # Delete the physical file if it exists
-            if os.path.exists(file_path):
-                os.remove(file_path)
-        
-        # Delete the record from database
-        c.execute('''DELETE FROM medical_records WHERE id = ?''', (record_id,))
-        conn.commit()
-        conn.close()
-        
-        return jsonify({'success': True, 'message': 'Medical record deleted successfully'})
-        
-    except Exception as e:
-        logger.error(f"Error deleting medical record: {e}")
-        return jsonify({'error': 'Failed to delete medical record'}), 500
 
 # Updated upload route to store files in uploads directory
 
-@app.route('/api/upload_medical_record', methods=['POST'])
-def upload_medical_record():
-    try:
-        if 'family_id' not in session or session.get('user_type') != 'patient':
-            return jsonify({'error': 'Unauthorized'}), 401
-
-        member_id = request.form.get('member_id')
-        record_type = request.form.get('record_type')
-        record_date = request.form.get('record_date')
-        description = request.form.get('description')
-        file = request.files.get('record_file')
-
-        if not member_id or not record_type or not record_date:
-            return jsonify({'error': 'Missing required fields'}), 400
-
-        file_path = None
-        if file and file.filename != '':
-            # Create uploads directory if it doesn't exist
-            upload_dir = 'uploads'
-            if not os.path.exists(upload_dir):
-                os.makedirs(upload_dir)
-            
-            # Generate unique filename
-            filename = secure_filename(file.filename)
-            unique_filename = f"medical_record_{member_id}_{int(time.time())}_{filename}"
-            file_path = os.path.join(upload_dir, unique_filename)
-            
-            # Save the file
-            file.save(file_path)
-
-        conn = get_db()
-        c = conn.cursor()
-        
-        c.execute('''INSERT INTO medical_records 
-                     (member_id, record_type, record_date, description, file_path) 
-                     VALUES (?, ?, ?, ?, ?)''',
-                  (member_id, record_type, record_date, description, file_path))
-        conn.commit()
-        conn.close()
-
-        return jsonify({'success': True, 'message': 'Medical record uploaded successfully'})
-
-    except Exception as e:
-        logger.error(f"Error uploading medical record: {e}")
-        return jsonify({'error': 'Failed to upload medical record'}), 500
     
 @app.route('/create_bill', methods=['POST'])
 def create_bill():

@@ -91,13 +91,16 @@ const PatientDashboard = () => {
   };
 
   const handleUploadSubmit = async (e) => {
+    debugger
     e.preventDefault();
     const uploadData = new FormData();
-    for (const key in formData) {
-      uploadData.append(key, formData[key]);
-    }
+    
+    // for (const key in formData) {
+    //   uploadData.append(key, formData[key]);
+    // }
     try {
-      await uploadMedicalRecord(uploadData);
+      debugger
+      await uploadMedicalRecord(formData);
       setShowModal(false);
       const res = await getPatientDashboardData();
       setData(res);

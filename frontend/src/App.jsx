@@ -30,6 +30,9 @@ import FrontOfficeViewPatient from './pages/FrontOfficeViewPatient';
 import FrontOfficeRegister from './pages/FrontOfficeRegister';
 // import AdminDashboard from './pages/ad';
 import AdminDashboard from './pages/AdminDashboard';
+import Patients from './pages/Patients';
+import Doctors from './pages/Doctor';
+import FrontOffice from './pages/FrontOffice';
 
 function App() {
   return (
@@ -67,6 +70,10 @@ function App() {
 // Add this route to your Routes
         <Route path="/front_office_register" element={<FrontOfficeRegister />} />
         <Route path="/admin_dashboard" element={<AdminDashboard />} />
+        <Route path="/patients" element={<Patients />} />
+        <Route path="/Doctors" element={<Doctors />} />
+        <Route path="/front-office" element={<FrontOffice />} />
+        
       </Routes>
     </Router>
   );
