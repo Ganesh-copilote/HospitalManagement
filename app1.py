@@ -148,55 +148,111 @@ def api_available_slots():
         return jsonify({'error': 'Failed to load available slots'}), 500
     
 
-
-
 @app.route('/api/upload_medical_record', methods=['POST'])
 def upload_medical_record():
     try:
-        if 'family_id' not in session or session.get('user_type') != 'patient':
-            return jsonify({'error': 'Unauthorized'}), 401
+        print("=== UPLOAD MEDICAL RECORD DEBUG ===")
+        print(f"Session data: {dict(session)}")
+        print(f"User type: {session.get('user_type')}")
+        print(f"User ID: {session.get('family_id')}")
+        print(f"family_id ID: {session['family_id']}")
+        
+        if session.get('user_type') not in ['patient', 'admin']:
+            print("❌ Unauthorized: Only patients or admins can upload medical records")
+            return jsonify({'error': 'Unauthorized - Only patients or admins can upload medical records'}), 401
 
+
+        family_id = session.get('family_id')  # This is the family_id from session
+        if not family_id:
+            print("❌ Unauthorized: No family ID in session")
+            return jsonify({'error': 'User not logged in'}), 401
+
+        # Get form data
         member_id = request.form.get('member_id')
         record_type = request.form.get('record_type')
         record_date = request.form.get('record_date')
         description = request.form.get('description')
         file = request.files.get('record_file')
 
-        if not member_id or not record_type or not record_date:
-            return jsonify({'error': 'Missing required fields'}), 400
+        print(f"Form data - member_id: {member_id}, record_type: {record_type}, record_date: {record_date}")
+        print(f"File received: {file.filename if file else 'No file'}")
 
+        if not member_id or not record_type or not record_date:
+            print("❌ Missing required fields")
+            return jsonify({'error': 'Missing required fields: member_id, record_type, and record_date are required'}), 400
+
+        # Verify that the member_id belongs to the patient's family
+        conn = get_db()
+        c = conn.cursor()
+        # Verify member belongs to family (only if patient)
+        if session.get('user_type') == 'patient':
+            c.execute('''SELECT m.id FROM members m 
+                        WHERE m.id = ? AND m.family_id = ?''', 
+                    (member_id, family_id))
+            member_check = c.fetchone()
+            if not member_check:
+                print(f"❌ Invalid family member: {member_id} for family: {family_id}")
+                conn.close()
+                return jsonify({'error': 'Invalid family member'}), 400
+            print("✅ Family member validation passed (patient)")
+        else:
+            # Admins can upload for any member
+            c.execute('SELECT id FROM members WHERE id = ?', (member_id,))
+            member_check = c.fetchone()
+            if not member_check:
+                print(f"❌ Invalid member_id: {member_id}")
+                conn.close()
+                return jsonify({'error': 'Invalid member_id'}), 400
+            print("✅ Member validation passed (admin)")
+
+
+        # Handle file upload
         file_path = None
         if file and file.filename != '':
+            # Validate file type
+            allowed_extensions = {'pdf', 'jpg', 'jpeg', 'png', 'doc', 'docx'}
+            filename = secure_filename(file.filename)
+            file_extension = filename.rsplit('.', 1)[1].lower() if '.' in filename else ''
+            
+            if file_extension not in allowed_extensions:
+                conn.close()
+                return jsonify({'error': f'File type not allowed. Allowed types: {", ".join(allowed_extensions)}'}), 400
+
             # Create uploads directory if it doesn't exist
             upload_dir = 'uploads'
             if not os.path.exists(upload_dir):
                 os.makedirs(upload_dir)
             
             # Generate unique filename
-            filename = secure_filename(file.filename)
             unique_filename = f"medical_record_{member_id}_{int(time.time())}_{filename}"
             file_path = os.path.join(upload_dir, unique_filename)
             
             # Save the file
             file.save(file_path)
+            print(f"✅ File saved: {file_path}")
 
-        conn = get_db()
-        c = conn.cursor()
-        
+        # Insert into database
         c.execute('''INSERT INTO medical_records 
                      (member_id, record_type, record_date, description, file_path) 
                      VALUES (?, ?, ?, ?, ?)''',
                   (member_id, record_type, record_date, description, file_path))
         conn.commit()
+        
+        record_id = c.lastrowid
         conn.close()
 
-        return jsonify({'success': True, 'message': 'Medical record uploaded successfully'})
+        print(f"✅ Medical record uploaded successfully with ID: {record_id}")
+        return jsonify({
+            'success': True, 
+            'message': 'Medical record uploaded successfully',
+            'record_id': record_id
+        })
 
     except Exception as e:
-        logger.error(f"Error uploading medical record: {e}")
-        return jsonify({'error': 'Failed to upload medical record'}), 500
-
-
+        print(f"❌ Error uploading medical record: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 from flask import send_file
 import sqlite3
 
@@ -725,6 +781,1552 @@ def api_admin_get_doctor_data():
         return jsonify({'error': str(e)}), 500
 
 
+# Get appointments for admin
+@app.route('/api/admin/appointments')
+def get_admin_appointments():
+    try:
+        print("=== GET ADMIN APPOINTMENTS DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Get appointments with patient and doctor details
+        c.execute('''
+            SELECT 
+                a.id,
+                a.member_id,
+                m.first_name as patient_first_name,
+                m.last_name as patient_last_name,
+                s.doctor_id,
+                d.name as doctor_name,
+                s.slot_time,
+                a.status
+            FROM appointments a
+            LEFT JOIN members m ON a.member_id = m.id
+            LEFT JOIN slots s ON a.slot_id = s.id
+            LEFT JOIN doctors d ON s.doctor_id = d.id
+            ORDER BY a.id DESC
+        ''')
+        
+        appointments = c.fetchall()
+        conn.close()
+
+        # Transform the data
+        appointments_list = []
+        for apt in appointments:
+            appointment_data = {
+                'id': apt['id'],
+                'patient_id': apt['member_id'],
+                'patient_first_name': apt['patient_first_name'],
+                'patient_last_name': apt['patient_last_name'],
+                'patient_name': f"{apt['patient_first_name']} {apt['patient_last_name']}",
+                'doctor_id': apt['doctor_id'],
+                'doctor_name': apt['doctor_name'],
+                'slot_time': apt['slot_time'],
+                'date': apt['slot_time'].split(' ')[0] if apt['slot_time'] else '',
+                'time': apt['slot_time'].split(' ')[1] if apt['slot_time'] and ' ' in apt['slot_time'] else '',
+                'status': apt['status']
+            }
+            appointments_list.append(appointment_data)
+
+        print(f"✅ Found {len(appointments_list)} appointments")
+        return jsonify({
+            'success': True,
+            'appointments': appointments_list
+        })
+
+    except Exception as e:
+        print(f"❌ Error fetching admin appointments: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+@app.route('/api/admin/slots')
+def get_admin_slots():
+    try:
+        print("=== GET ADMIN SLOTS DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Get slots with doctor details
+        c.execute('''
+            SELECT 
+                s.id,
+                s.doctor_id,
+                d.name as doctor_name,
+                s.slot_time,
+                s.booked
+            FROM slots s
+            LEFT JOIN doctors d ON s.doctor_id = d.id
+            ORDER BY s.slot_time DESC
+        ''')
+        
+        slots = c.fetchall()
+        conn.close()
+
+        # Transform the data
+        slots_list = []
+        for slot in slots:
+            slot_data = {
+                'id': slot['id'],
+                'doctor_id': slot['doctor_id'],
+                'doctor_name': slot['doctor_name'],
+                'slot_time': slot['slot_time'],
+                'date': slot['slot_time'].split(' ')[0] if slot['slot_time'] else '',
+                'start_time': slot['slot_time'].split(' ')[1] if slot['slot_time'] and ' ' in slot['slot_time'] else '',
+                'end_time': '',  # You might want to calculate this based on your slot duration
+                'is_available': not bool(slot['booked'])
+            }
+            slots_list.append(slot_data)
+
+        print(f"✅ Found {len(slots_list)} slots")
+        return jsonify({
+            'success': True,
+            'slots': slots_list
+        })
+
+    except Exception as e:
+        print(f"❌ Error fetching admin slots: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+# Medical Records Routes for Admin - GET only
+@app.route('/api/admin/medical_records')
+def get_admin_medical_records():
+    try:
+        print("=== GET ADMIN MEDICAL RECORDS DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Get medical records with patient details
+        c.execute('''
+            SELECT 
+                mr.id,
+                mr.member_id as patient_id,
+                m.first_name as patient_first_name,
+                m.last_name as patient_last_name,
+                mr.record_type,
+                mr.record_date,
+                mr.description,
+                mr.file_path,
+                mr.uploaded_date
+            FROM medical_records mr
+            LEFT JOIN members m ON mr.member_id = m.id
+            ORDER BY mr.record_date DESC
+        ''')
+        
+        medical_records = c.fetchall()
+        conn.close()
+
+        # Transform the data
+        records_list = []
+        for record in medical_records:
+            record_data = {
+                'id': record['id'],
+                'patient_id': record['patient_id'],
+                'patient_name': f"{record['patient_first_name']} {record['patient_last_name']}",
+                'record_type': record['record_type'],
+                'date': record['record_date'],
+                'description': record['description'],
+                'file_path': record['file_path'],
+                'uploaded_date': record['uploaded_date']
+            }
+            records_list.append(record_data)
+
+        print(f"✅ Found {len(records_list)} medical records")
+        return jsonify({
+            'success': True,
+            'medical_records': records_list
+        })
+
+    except Exception as e:
+        print(f"❌ Error fetching admin medical records: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+@app.route('/api/admin/prescriptions')
+def get_admin_prescriptions():
+    try:
+        print("=== GET ADMIN PRESCRIPTIONS DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Get prescriptions with patient and doctor details
+        c.execute('''
+            SELECT 
+                p.id,
+                p.member_id as patient_id,
+                m.first_name as patient_first_name,
+                m.last_name as patient_last_name,
+                p.doctor_id,
+                d.name as doctor_name,
+                p.prescription_date,
+                p.medication,
+                p.dosage,
+                p.instructions,
+                p.frequency,
+                p.duration,
+                p.notes
+            FROM prescriptions p
+            LEFT JOIN members m ON p.member_id = m.id
+            LEFT JOIN doctors d ON p.doctor_id = d.id
+            ORDER BY p.prescription_date DESC
+        ''')
+        
+        prescriptions = c.fetchall()
+        conn.close()
+
+        # Transform the data
+        prescriptions_list = []
+        for prescription in prescriptions:
+            prescription_data = {
+                'id': prescription['id'],
+                'patient_id': prescription['patient_id'],
+                'patient_name': f"{prescription['patient_first_name']} {prescription['patient_last_name']}",
+                'doctor_id': prescription['doctor_id'],
+                'doctor_name': prescription['doctor_name'],
+                'date': prescription['prescription_date'],
+                'medication': prescription['medication'],
+                'dosage': prescription['dosage'],
+                'instructions': prescription['instructions'],
+                'frequency': prescription['frequency'],
+                'duration': prescription['duration'],
+                'notes': prescription['notes']
+            }
+            prescriptions_list.append(prescription_data)
+
+        print(f"✅ Found {len(prescriptions_list)} prescriptions")
+        return jsonify({
+            'success': True,
+            'prescriptions': prescriptions_list
+        })
+
+    except Exception as e:
+        print(f"❌ Error fetching admin prescriptions: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+# Add appointment (admin)
+@app.route('/api/admin/appointments/add', methods=['POST'])
+def add_admin_appointment():
+    try:
+        print("=== ADD ADMIN APPOINTMENT DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        data = request.get_json()
+        print(f"Received data: {data}")
+
+        member_id = data.get('patient_id')
+        doctor_id = data.get('doctor_id')
+        date = data.get('date')
+        time = data.get('time')
+        status = data.get('status', 'scheduled')
+        reason = data.get('reason', '')
+
+        if not all([member_id, doctor_id, date, time]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Create slot_time by combining date and time
+        slot_time = f"{date} {time}"
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # First, create a slot for this appointment
+        c.execute('''
+            INSERT INTO slots (doctor_id, slot_time, booked)
+            VALUES (?, ?, ?)
+        ''', (doctor_id, slot_time, 1))
+
+        slot_id = c.lastrowid
+
+        # Then create the appointment
+        c.execute('''
+            INSERT INTO appointments (member_id, slot_id, status)
+            VALUES (?, ?, ?)
+        ''', (member_id, slot_id, status))
+
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Appointment created successfully with ID: {c.lastrowid}")
+        return jsonify({
+            'success': True,
+            'message': 'Appointment created successfully',
+            'appointment_id': c.lastrowid
+        })
+
+    except Exception as e:
+        print(f"❌ Error creating admin appointment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+# Update appointment (admin)
+@app.route('/api/admin/appointments/<int:appointment_id>', methods=['PUT'])
+def update_admin_appointment(appointment_id):
+    try:
+        print(f"=== UPDATE ADMIN APPOINTMENT {appointment_id} DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        data = request.get_json()
+        print(f"Received data: {data}")
+
+        status = data.get('status')
+        reason = data.get('reason')
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # Update appointment
+        c.execute('''
+            UPDATE appointments 
+            SET status = ?, 
+                updated_date = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (status, appointment_id))
+
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Appointment {appointment_id} updated successfully")
+        return jsonify({
+            'success': True,
+            'message': 'Appointment updated successfully'
+        })
+
+    except Exception as e:
+        print(f"❌ Error updating admin appointment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+# Delete appointment (admin)
+@app.route('/api/admin/appointments/<int:appointment_id>', methods=['DELETE'])
+def delete_admin_appointment(appointment_id):
+    try:
+        print(f"=== DELETE ADMIN APPOINTMENT {appointment_id} DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # First get the slot_id to delete the slot as well
+        c.execute('SELECT slot_id FROM appointments WHERE id = ?', (appointment_id,))
+        appointment = c.fetchone()
+        
+        if not appointment:
+            conn.close()
+            return jsonify({'error': 'Appointment not found'}), 404
+
+        # Delete the appointment
+        c.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+        
+        # Delete the associated slot
+        c.execute('DELETE FROM slots WHERE id = ?', (appointment['slot_id'],))
+
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Appointment {appointment_id} deleted successfully")
+        return jsonify({
+            'success': True,
+            'message': 'Appointment deleted successfully'
+        })
+
+    except Exception as e:
+        print(f"❌ Error deleting admin appointment: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+# Add slot (admin)
+@app.route('/api/admin/slots/add', methods=['POST'])
+def add_admin_slot():
+    try:
+        print("=== ADD ADMIN SLOT DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        data = request.get_json()
+        print(f"Received data: {data}")
+
+        doctor_id = data.get('doctor_id')
+        date = data.get('date')
+        start_time = data.get('start_time')
+        end_time = data.get('end_time')
+        is_available = data.get('is_available', True)
+        max_patients = data.get('max_patients', 1)
+
+        if not all([doctor_id, date, start_time]):
+            return jsonify({'error': 'Missing required fields'}), 400
+
+        # Create slot_time by combining date and start_time
+        slot_time = f"{date} {start_time}"
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # Check if slot already exists
+        c.execute('''
+            SELECT id FROM slots 
+            WHERE doctor_id = ? AND slot_time = ?
+        ''', (doctor_id, slot_time))
+        
+        existing_slot = c.fetchone()
+        if existing_slot:
+            conn.close()
+            return jsonify({'error': 'Slot already exists for this doctor and time'}), 400
+
+        # Insert new slot
+        c.execute('''
+            INSERT INTO slots (doctor_id, slot_time, booked)
+            VALUES (?, ?, ?)
+        ''', (doctor_id, slot_time, 0 if is_available else 1))
+
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Slot created successfully with ID: {c.lastrowid}")
+        return jsonify({
+            'success': True,
+            'message': 'Slot created successfully',
+            'slot_id': c.lastrowid
+        })
+
+    except Exception as e:
+        print(f"❌ Error creating admin slot: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+# Update slot (admin)
+@app.route('/api/admin/slots/<int:slot_id>', methods=['PUT'])
+def update_admin_slot(slot_id):
+    try:
+        print(f"=== UPDATE ADMIN SLOT {slot_id} DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        data = request.get_json()
+        print(f"Received data: {data}")
+
+        is_available = data.get('is_available', True)
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # Update slot availability
+        c.execute('''
+            UPDATE slots 
+            SET booked = ?
+            WHERE id = ?
+        ''', (0 if is_available else 1, slot_id))
+
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Slot {slot_id} updated successfully")
+        return jsonify({
+            'success': True,
+            'message': 'Slot updated successfully'
+        })
+
+    except Exception as e:
+        print(f"❌ Error updating admin slot: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+# Delete slot (admin)
+@app.route('/api/admin/slots/<int:slot_id>', methods=['DELETE'])
+def delete_admin_slot(slot_id):
+    try:
+        print(f"=== DELETE ADMIN SLOT {slot_id} DEBUG ===")
+        
+        # Check if user is admin
+        if session.get('user_type') != 'admin':
+            return jsonify({'error': 'Unauthorized - Admin access required'}), 401
+
+        conn = get_db()
+        c = conn.cursor()
+
+        # Check if slot has any appointments
+        c.execute('SELECT id FROM appointments WHERE slot_id = ?', (slot_id,))
+        appointments = c.fetchall()
+        
+        if appointments:
+            conn.close()
+            return jsonify({'error': 'Cannot delete slot with existing appointments'}), 400
+
+        # Delete the slot
+        c.execute('DELETE FROM slots WHERE id = ?', (slot_id,))
+
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Slot {slot_id} deleted successfully")
+        return jsonify({
+            'success': True,
+            'message': 'Slot deleted successfully'
+        })
+
+    except Exception as e:
+        print(f"❌ Error deleting admin slot: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
+
+
+
+@app.route('/api/admin/patients/<int:patient_id>', methods=['PUT'])
+def admin_update_patient(patient_id):
+    if 'user_type' not in session or session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'})
+    
+    try:
+        data = request.get_json()
+        logger.info(f"Updating patient {patient_id} with data: {data}")
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Update patient information
+        c.execute('''
+            UPDATE members SET 
+                first_name = ?, 
+                last_name = ?, 
+                middle_name = ?, 
+                age = ?, 
+                gender = ?, 
+                email = ?, 
+                phone = ?, 
+                address = ?, 
+                aadhar = ?, 
+                prev_problem = ?, 
+                curr_problem = ?,
+                created_date = CURRENT_TIMESTAMP
+            WHERE id = ?
+        ''', (
+            data.get('first_name'),
+            data.get('last_name'), 
+            data.get('middle_name'),
+            data.get('age'),
+            data.get('gender'),
+            data.get('email'),
+            data.get('phone'),
+            data.get('address'),
+            data.get('aadhar'),
+            data.get('prev_problem'),
+            data.get('curr_problem'),
+            patient_id
+        ))
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Patient {patient_id} updated successfully")
+        return jsonify({'success': True, 'message': 'Patient updated successfully'})
+    
+    except Exception as e:
+        logger.error(f"Admin update patient error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+
+@app.route('/api/admin/patients/delete/<int:patient_id>', methods=['DELETE'])
+def admin_delete_patient(patient_id):
+    if 'user_type' not in session or session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'})
+    
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # First, get the family_id for this patient
+        c.execute('SELECT family_id FROM members WHERE id = ?', (patient_id,))
+        member = c.fetchone()
+        
+        if member:
+            family_id = member['family_id']
+            
+            # Delete all related records first (to maintain referential integrity)
+            # Delete appointments for this patient
+            c.execute('DELETE FROM appointments WHERE member_id = ?', (patient_id,))
+            
+            # Delete medical records for this patient
+            c.execute('DELETE FROM medical_records WHERE member_id = ?', (patient_id,))
+            
+            # Delete prescriptions for this patient
+            c.execute('DELETE FROM prescriptions WHERE member_id = ?', (patient_id,))
+            
+            # Delete bills for this patient
+            c.execute('DELETE FROM bills WHERE member_id = ?', (patient_id,))
+            
+            # Delete the patient from members table
+            c.execute('DELETE FROM members WHERE id = ?', (patient_id,))
+            
+            # Check if there are any other members in this family
+            c.execute('SELECT COUNT(*) as count FROM members WHERE family_id = ?', (family_id,))
+            remaining_members = c.fetchone()['count']
+            
+            # If no more members in this family, delete the family too
+            if remaining_members == 0:
+                c.execute('DELETE FROM families WHERE id = ?', (family_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            return jsonify({'success': True, 'message': 'Patient deleted successfully'})
+        else:
+            conn.close()
+            return jsonify({'success': False, 'error': 'Patient not found'})
+    
+    except Exception as e:
+        logger.error(f"Admin delete patient error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+import uuid
+import secrets
+import string
+from werkzeug.security import generate_password_hash
+
+@app.route('/api/admin/patients/add', methods=['POST'])
+def admin_add_patient():
+    if 'user_type' not in session or session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'})
+    
+    try:
+        data = request.get_json()
+        logger.info(f"Creating new patient with data: {data}")
+        
+        # Validate required fields
+        required_fields = ['first_name', 'last_name', 'email', 'phone']
+        for field in required_fields:
+            if not data.get(field):
+                return jsonify({'success': False, 'error': f'{field} is required'}), 400
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Generate a unique family_id
+        family_id = str(uuid.uuid4())[:8].upper()
+        
+        # Generate a random password (8 characters: letters + digits)
+        alphabet = string.ascii_letters + string.digits
+        random_password = ''.join(secrets.choice(alphabet) for i in range(8))
+        
+        # Generate password hash
+        password_hash = generate_password_hash(random_password)
+        
+        # Create a new family
+        c.execute('INSERT INTO families (id, user_type) VALUES (?, ?)', (family_id, 1))
+        
+        # Create the patient member with password hash
+        c.execute('''
+            INSERT INTO members (
+                family_id, first_name, last_name, middle_name, age, gender, 
+                email, phone, address, aadhar, prev_problem, curr_problem,
+                created_date, password_hash
+            ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+        ''', (
+            family_id,
+            data.get('first_name'),
+            data.get('last_name'), 
+            data.get('middle_name', ''),
+            data.get('age'),
+            data.get('gender', ''),
+            data.get('email'),
+            data.get('phone'),
+            data.get('address', ''),
+            data.get('aadhar', ''),
+            data.get('prev_problem', ''),
+            data.get('curr_problem', ''),
+            password_hash  # Add the password hash
+        ))
+        
+        patient_id = c.lastrowid
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"Patient created successfully with ID: {patient_id}, family_id: {family_id}")
+        return jsonify({
+            'success': True, 
+            'message': 'Patient created successfully', 
+            'patient_id': patient_id,
+            'family_id': family_id,
+            'generated_password': random_password  # Return the generated password
+        })
+    
+    except Exception as e:
+        logger.error(f"Admin add patient error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+    
+
+# Unified add route for all user types including appointments and slots
+@app.route('/api/admin/users/add', methods=['POST'])
+def admin_add_user():
+    if 'user_type' not in session or session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'})
+    
+    try:
+        data = request.get_json()
+        user_type = data.get('user_type')  # 'patient', 'doctor', 'frontoffice', 'appointment', 'slot'
+        logger.info(f"Creating new {user_type} with data: {data}")
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        if user_type in ['patient', 'doctor', 'frontoffice']:
+            # Generate a unique family_id
+            family_id = str(uuid.uuid4())[:8].upper()
+            
+            # Generate a random password
+            alphabet = string.ascii_letters + string.digits
+            random_password = ''.join(secrets.choice(alphabet) for i in range(8))
+            password_hash = generate_password_hash(random_password)
+            
+            # Map user types to database user_type values
+            user_type_map = {
+                'patient': 1,
+                'doctor': 2, 
+                'frontoffice': 3
+            }
+            
+            # Create a new family with the correct user_type
+            db_user_type = user_type_map.get(user_type, 1)
+            c.execute('INSERT INTO families (id, user_type) VALUES (?, ?)', (family_id, db_user_type))
+            
+            user_id = None
+            
+            if user_type == 'patient':
+                # Validate required fields for patient
+                required_fields = ['first_name', 'last_name', 'email', 'phone']
+                for field in required_fields:
+                    if not data.get(field):
+                        return jsonify({'success': False, 'error': f'{field} is required'}), 400
+                
+                # Create patient in members table
+                c.execute('''
+                    INSERT INTO members (
+                        family_id, first_name, last_name, middle_name, age, gender, 
+                        email, phone, address, aadhar, prev_problem, curr_problem,
+                        created_date, password_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, CURRENT_TIMESTAMP, ?)
+                ''', (
+                    family_id,
+                    data.get('first_name'),
+                    data.get('last_name'), 
+                    data.get('middle_name', ''),
+                    data.get('age'),
+                    data.get('gender', ''),
+                    data.get('email'),
+                    data.get('phone'),
+                    data.get('address', ''),
+                    data.get('aadhar', ''),
+                    data.get('prev_problem', ''),
+                    data.get('curr_problem', ''),
+                    password_hash
+                ))
+                user_id = c.lastrowid
+                
+            elif user_type == 'doctor':
+                # Validate required fields for doctor
+                required_fields = ['name', 'specialty', 'email', 'phone']
+                for field in required_fields:
+                    if not data.get(field):
+                        return jsonify({'success': False, 'error': f'{field} is required'}), 400
+                
+                # Create doctor in doctors table
+                c.execute('''
+                    INSERT INTO doctors (
+                        family_id, name, specialty, email, phone, password_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    family_id,
+                    data.get('name'),
+                    data.get('specialty'),
+                    data.get('email'),
+                    data.get('phone'),
+                    password_hash
+                ))
+                user_id = c.lastrowid
+                
+            elif user_type == 'frontoffice':
+                # Validate required fields for front office
+                required_fields = ['first_name', 'last_name', 'email', 'phone']
+                for field in required_fields:
+                    if not data.get(field):
+                        return jsonify({'success': False, 'error': f'{field} is required'}), 400
+                
+                # Create front office in front_office table
+                c.execute('''
+                    INSERT INTO front_office (
+                        family_id, first_name, last_name, email, phone, password_hash
+                    ) VALUES (?, ?, ?, ?, ?, ?)
+                ''', (
+                    family_id,
+                    data.get('first_name'),
+                    data.get('last_name'),
+                    data.get('email'),
+                    data.get('phone'),
+                    password_hash,
+                ))
+                user_id = c.lastrowid
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"{user_type.capitalize()} created successfully with ID: {user_id}, family_id: {family_id}")
+            return jsonify({
+                'success': True, 
+                'message': f'{user_type.capitalize()} created successfully', 
+                'user_id': user_id,
+                'family_id': family_id,
+                'generated_password': random_password
+            })
+        
+        elif user_type == 'appointment':
+            # Validate required fields for appointment
+            required_fields = ['patient_id', 'doctor_id', 'date', 'time']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Create slot_time by combining date and time
+            slot_time = f"{data.get('date')} {data.get('time')}"
+            status = data.get('status', 'Scheduled')
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Check if doctor exists
+            c.execute('SELECT id FROM doctors WHERE id = ?', (data.get('doctor_id'),))
+            doctor = c.fetchone()
+            if not doctor:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Doctor not found'}), 400
+            
+            # Check if slot already exists for this doctor and time
+            c.execute('SELECT id FROM slots WHERE doctor_id = ? AND slot_time = ?', 
+                     (data.get('doctor_id'), slot_time))
+            existing_slot = c.fetchone()
+            
+            slot_id = None
+            if existing_slot:
+                # Use existing slot
+                slot_id = existing_slot['id']
+                # Check if slot is already booked
+                c.execute('SELECT booked FROM slots WHERE id = ?', (slot_id,))
+                slot_info = c.fetchone()
+                if slot_info and slot_info['booked']:
+                    conn.close()
+                    return jsonify({'success': False, 'error': 'Slot is already booked'}), 400
+                # Mark slot as booked
+                c.execute('UPDATE slots SET booked = 1 WHERE id = ?', (slot_id,))
+            else:
+                # Create new slot
+                c.execute('INSERT INTO slots (doctor_id, slot_time, booked) VALUES (?, ?, ?)', 
+                         (data.get('doctor_id'), slot_time, 1))
+                slot_id = c.lastrowid
+            
+            # Create the appointment
+            c.execute('INSERT INTO appointments (member_id, slot_id, status) VALUES (?, ?, ?)', 
+                     (data.get('patient_id'), slot_id, status))
+            appointment_id = c.lastrowid
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Appointment created successfully with ID: {appointment_id}")
+            return jsonify({
+                'success': True, 
+                'message': 'Appointment created successfully', 
+                'appointment_id': appointment_id
+            })
+        
+        elif user_type == 'slot':
+            # Validate required fields for slot
+            required_fields = ['doctor_id', 'date', 'start_time']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Create slot_time by combining date and start_time
+            slot_time = f"{data.get('date')} {data.get('start_time')}"
+            is_available = data.get('is_available', True)
+            
+            # Check if doctor exists
+            c.execute('SELECT id FROM doctors WHERE id = ?', (data.get('doctor_id'),))
+            doctor = c.fetchone()
+            if not doctor:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Doctor not found'}), 400
+            
+            # Check if slot already exists
+            c.execute('SELECT id FROM slots WHERE doctor_id = ? AND slot_time = ?', 
+                     (data.get('doctor_id'), slot_time))
+            existing_slot = c.fetchone()
+            
+            if existing_slot:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Slot already exists for this doctor and time'}), 400
+            
+            # Insert new slot
+            c.execute('INSERT INTO slots (doctor_id, slot_time, booked) VALUES (?, ?, ?)', 
+                     (data.get('doctor_id'), slot_time, 0 if is_available else 1))
+            slot_id = c.lastrowid
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Slot created successfully with ID: {slot_id}")
+            return jsonify({
+                'success': True, 
+                'message': 'Slot created successfully', 
+                'slot_id': slot_id
+            })
+
+        # Add this to your existing admin_add_user function
+        elif user_type == 'medical_record':
+            # Validate required fields for medical record
+            required_fields = ['patient_id', 'record_type', 'record_date', 'description']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Insert medical record
+            c.execute('''
+                INSERT INTO medical_records (
+                    member_id, record_type, record_date, description, file_path
+                ) VALUES (?, ?, ?, ?, ?)
+            ''', (
+                data.get('patient_id'),
+                data.get('record_type'),
+                data.get('record_date'),
+                data.get('description'),
+                data.get('file_path', '')
+            ))
+            
+            record_id = c.lastrowid
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Medical record created successfully with ID: {record_id}")
+            return jsonify({
+                'success': True, 
+                'message': 'Medical record created successfully', 
+                'record_id': record_id
+            })
+        elif user_type == 'prescription':
+            # Validate required fields for prescription
+            required_fields = ['patient_id', 'doctor_id', 'prescription_date', 'medication']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Check if doctor exists
+            c.execute('SELECT id FROM doctors WHERE id = ?', (data.get('doctor_id'),))
+            doctor = c.fetchone()
+            if not doctor:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Doctor not found'}), 400
+            
+            # Insert prescription
+            c.execute('''
+                INSERT INTO prescriptions (
+                    member_id, doctor_id, prescription_date, medication, 
+                    dosage, instructions, frequency, duration, notes
+                ) VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)
+            ''', (
+                data.get('patient_id'),
+                data.get('doctor_id'),
+                data.get('prescription_date'),
+                data.get('medication'),
+                data.get('dosage', ''),
+                data.get('instructions', ''),
+                data.get('frequency', ''),
+                data.get('duration', ''),
+                data.get('notes', '')
+            ))
+            
+            prescription_id = c.lastrowid
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Prescription created successfully with ID: {prescription_id}")
+            return jsonify({
+                'success': True, 
+                'message': 'Prescription created successfully', 
+                'prescription_id': prescription_id
+            })
+        
+
+        elif user_type == 'bill':
+            # Validate required fields for bill
+            required_fields = ['patient_id', 'bill_date', 'amount']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Insert bill
+            c.execute('''
+                INSERT INTO bills (
+                    member_id, bill_date, amount, status, description
+                ) VALUES (?, ?, ?, ?, ?)
+            ''', (
+                data.get('patient_id'),
+                data.get('bill_date'),
+                data.get('amount'),
+                data.get('status', 'Pending'),
+                data.get('description', '')
+            ))
+            
+            bill_id = c.lastrowid
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Bill created successfully with ID: {bill_id}")
+            return jsonify({
+                'success': True, 
+                'message': 'Bill created successfully', 
+                'bill_id': bill_id
+            })
+
+        else:
+            return jsonify({'success': False, 'error': 'Invalid user type'}), 400
+    
+    except Exception as e:
+        logger.error(f"Admin add {user_type} error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Unified update route for all user types including appointments and slots
+# Unified update route for all user types including appointments and slots
+# Unified update route for all user types including appointments and slots
+@app.route('/api/admin/users/<user_type>/<int:user_id>', methods=['PUT'])
+def admin_update_user(user_type, user_id):
+    if 'user_type' not in session or session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'})
+    
+    try:
+        data = request.get_json()
+        logger.info(f"Updating {user_type} {user_id} with data: {data}")
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        if user_type == 'patients':
+            # Update patient in members table
+            c.execute('''
+                UPDATE members SET 
+                    first_name = ?, last_name = ?, middle_name = ?, age = ?, 
+                    gender = ?, email = ?, phone = ?, address = ?, aadhar = ?, 
+                    prev_problem = ?, curr_problem = ?
+                WHERE id = ?
+            ''', (
+                data.get('first_name'), data.get('last_name'), data.get('middle_name'),
+                data.get('age'), data.get('gender'), data.get('email'), data.get('phone'),
+                data.get('address'), data.get('aadhar'), data.get('prev_problem'),
+                data.get('curr_problem'), user_id
+            ))
+            
+        elif user_type == 'doctors':
+            # Update doctor in doctors table
+            c.execute('''
+                UPDATE doctors SET 
+                    name = ?, specialty = ?, email = ?, phone = ?
+                WHERE id = ?
+            ''', (
+                data.get('name'), data.get('specialty'), data.get('email'),
+                data.get('phone'), user_id
+            ))
+            
+        elif user_type == 'frontoffice':
+            # Update front office in front_office table
+            c.execute('''
+                UPDATE front_office SET 
+                    first_name = ?, last_name = ?, email = ?, phone = ?
+                WHERE id = ?
+            ''', (
+                data.get('first_name'), data.get('last_name'), data.get('email'),
+                data.get('phone'), user_id
+            ))
+        
+        elif user_type == 'appointment':
+            # Validate required fields for appointment
+            required_fields = ['patient_id', 'doctor_id', 'date', 'time', 'status']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Check if appointment exists
+            c.execute('SELECT id, slot_id FROM appointments WHERE id = ?', (user_id,))
+            appointment = c.fetchone()
+            
+            if not appointment:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Appointment not found'}), 404
+            
+            # Create new slot_time by combining date and time
+            new_slot_time = f"{data.get('date')} {data.get('time')}"
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Check if doctor exists
+            c.execute('SELECT id FROM doctors WHERE id = ?', (data.get('doctor_id'),))
+            doctor = c.fetchone()
+            if not doctor:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Doctor not found'}), 400
+            
+            # Get the current slot_id
+            current_slot_id = appointment['slot_id']
+            
+            # Check if we need to update the slot (if doctor or time changed)
+            c.execute('SELECT doctor_id, slot_time FROM slots WHERE id = ?', (current_slot_id,))
+            current_slot = c.fetchone()
+            
+            if (current_slot['doctor_id'] != data.get('doctor_id') or 
+                current_slot['slot_time'] != new_slot_time):
+                
+                # Free up the old slot
+                c.execute('UPDATE slots SET booked = 0 WHERE id = ?', (current_slot_id,))
+                
+                # Check if new slot already exists for this doctor and time
+                c.execute('SELECT id FROM slots WHERE doctor_id = ? AND slot_time = ?', 
+                         (data.get('doctor_id'), new_slot_time))
+                existing_slot = c.fetchone()
+                
+                new_slot_id = None
+                if existing_slot:
+                    # Use existing slot
+                    new_slot_id = existing_slot['id']
+                    # Check if slot is already booked
+                    c.execute('SELECT booked FROM slots WHERE id = ?', (new_slot_id,))
+                    slot_info = c.fetchone()
+                    if slot_info and slot_info['booked']:
+                        conn.close()
+                        return jsonify({'success': False, 'error': 'Slot is already booked'}), 400
+                    # Mark slot as booked
+                    c.execute('UPDATE slots SET booked = 1 WHERE id = ?', (new_slot_id,))
+                else:
+                    # Create new slot
+                    c.execute('INSERT INTO slots (doctor_id, slot_time, booked) VALUES (?, ?, ?)', 
+                             (data.get('doctor_id'), new_slot_time, 1))
+                    new_slot_id = c.lastrowid
+                
+                # Update appointment with new slot_id
+                c.execute('UPDATE appointments SET member_id = ?, slot_id = ?, status = ? WHERE id = ?', 
+                         (data.get('patient_id'), new_slot_id, data.get('status'), user_id))
+            else:
+                # Only update patient and status (same doctor and time)
+                c.execute('UPDATE appointments SET member_id = ?, status = ? WHERE id = ?', 
+                         (data.get('patient_id'), data.get('status'), user_id))
+        
+        elif user_type == 'slot':
+            # Update slot availability
+            is_available = data.get('is_available', True)
+            
+            # Check if slot exists
+            c.execute('SELECT id FROM slots WHERE id = ?', (user_id,))
+            slot = c.fetchone()
+            
+            if not slot:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Slot not found'}), 404
+            
+            # Update slot - only update booked status (remove max_patients)
+            c.execute('UPDATE slots SET booked = ? WHERE id = ?', 
+                    (0 if is_available else 1, user_id))
+        
+        elif user_type == 'medical_record':
+            print(f"🔄 Updating medical record {user_id} with data: {data}")
+            
+            # Validate required fields for medical record
+            required_fields = ['patient_id', 'record_type', 'record_date', 'description']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Check if medical record exists
+            c.execute('SELECT id FROM medical_records WHERE id = ?', (user_id,))
+            record = c.fetchone()
+            if not record:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Medical record not found'}), 404
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Update medical record
+            c.execute('''
+                UPDATE medical_records SET 
+                    member_id = ?, record_type = ?, record_date = ?, description = ?, file_path = ?
+                WHERE id = ?
+            ''', (
+                data.get('patient_id'),
+                data.get('record_type'),
+                data.get('record_date'),
+                data.get('description'),
+                data.get('file_path', ''),
+                user_id
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Medical record {user_id} updated successfully")
+            return jsonify({'success': True, 'message': 'Medical record updated successfully'})
+        
+        elif user_type == 'prescription':
+            print(f"🔄 Updating prescription {user_id} with data: {data}")
+            
+            # Validate required fields for prescription
+            required_fields = ['patient_id', 'doctor_id', 'prescription_date', 'medication']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Check if prescription exists
+            c.execute('SELECT id FROM prescriptions WHERE id = ?', (user_id,))
+            prescription = c.fetchone()
+            if not prescription:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Prescription not found'}), 404
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Check if doctor exists
+            c.execute('SELECT id FROM doctors WHERE id = ?', (data.get('doctor_id'),))
+            doctor = c.fetchone()
+            if not doctor:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Doctor not found'}), 400
+            
+            # Update prescription
+            c.execute('''
+                UPDATE prescriptions SET 
+                    member_id = ?, doctor_id = ?, prescription_date = ?, medication = ?, 
+                    dosage = ?, instructions = ?, frequency = ?, duration = ?, notes = ?
+                WHERE id = ?
+            ''', (
+                data.get('patient_id'),
+                data.get('doctor_id'),
+                data.get('prescription_date'),
+                data.get('medication'),
+                data.get('dosage', ''),
+                data.get('instructions', ''),
+                data.get('frequency', ''),
+                data.get('duration', ''),
+                data.get('notes', ''),
+                user_id
+            ))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Prescription {user_id} updated successfully")
+            return jsonify({'success': True, 'message': 'Prescription updated successfully'})
+        
+        elif user_type == 'bills':
+            # Validate required fields for bill
+            required_fields = ['patient_id', 'bill_date', 'amount', 'status']
+            for field in required_fields:
+                if not data.get(field):
+                    return jsonify({'success': False, 'error': f'{field} is required'}), 400
+            
+            # Check if bill exists
+            c.execute('SELECT id FROM bills WHERE id = ?', (user_id,))
+            bill = c.fetchone()
+            if not bill:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Bill not found'}), 404
+            
+            # Check if patient exists
+            c.execute('SELECT id FROM members WHERE id = ?', (data.get('patient_id'),))
+            patient = c.fetchone()
+            if not patient:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Patient not found'}), 400
+            
+            # Update bill
+            c.execute('''
+                UPDATE bills SET 
+                    member_id = ?, bill_date = ?, amount = ?, status = ?, description = ?
+                WHERE id = ?
+            ''', (
+                data.get('patient_id'),
+                data.get('bill_date'),
+                data.get('amount'),
+                data.get('status'),
+                data.get('description', ''),
+                user_id
+            ))
+
+
+        else:
+            return jsonify({'success': False, 'error': 'Invalid user type'}), 400
+        
+        conn.commit()
+        conn.close()
+        
+        logger.info(f"{user_type.capitalize()} {user_id} updated successfully")
+        return jsonify({'success': True, 'message': f'{user_type.capitalize()} updated successfully'})
+    
+    except Exception as e:
+        logger.error(f"Admin update {user_type} error: {e}")
+        return jsonify({'success': False, 'error': str(e)}), 500
+
+# Unified delete route for all user types including appointments and slots
+# Unified delete route for all user types including appointments and slots
+@app.route('/api/admin/users/<user_type>/<int:user_id>', methods=['DELETE'])
+def admin_delete_user(user_type, user_id):
+    if 'user_type' not in session or session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'})
+    
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        if user_type == 'patients':
+            # Get family_id for this patient
+            c.execute('SELECT family_id FROM members WHERE id = ?', (user_id,))
+            member = c.fetchone()
+            
+            if member:
+                family_id = member['family_id']
+                
+                # Delete related records
+                c.execute('DELETE FROM appointments WHERE member_id = ?', (user_id,))
+                c.execute('DELETE FROM medical_records WHERE member_id = ?', (user_id,))
+                c.execute('DELETE FROM prescriptions WHERE member_id = ?', (user_id,))
+                c.execute('DELETE FROM bills WHERE member_id = ?', (user_id,))
+                c.execute('DELETE FROM members WHERE id = ?', (user_id,))
+                
+                # Check if family has other members
+                c.execute('SELECT COUNT(*) as count FROM members WHERE family_id = ?', (family_id,))
+                remaining_members = c.fetchone()['count']
+                
+                if remaining_members == 0:
+                    c.execute('DELETE FROM families WHERE id = ?', (family_id,))
+                    
+        elif user_type == 'doctors':
+            # Get family_id for this doctor
+            c.execute('SELECT family_id FROM doctors WHERE id = ?', (user_id,))
+            doctor = c.fetchone()
+            
+            if doctor:
+                family_id = doctor['family_id']
+                
+                # Delete related records
+                c.execute('DELETE FROM slots WHERE doctor_id = ?', (user_id,))
+                c.execute('DELETE FROM prescriptions WHERE doctor_id = ?', (user_id,))
+                c.execute('DELETE FROM doctors WHERE id = ?', (user_id,))
+                c.execute('DELETE FROM families WHERE id = ?', (family_id,))
+                
+        elif user_type == 'frontoffice':
+            # Get family_id for this front office staff
+            c.execute('SELECT family_id FROM front_office WHERE id = ?', (user_id,))
+            front_office = c.fetchone()
+            
+            if front_office:
+                family_id = front_office['family_id']
+                c.execute('DELETE FROM front_office WHERE id = ?', (user_id,))
+                c.execute('DELETE FROM families WHERE id = ?', (family_id,))
+        
+        elif user_type == 'appointment':
+            print("coming inside the appointments in delete function")
+            # Get slot_id for this appointment
+            c.execute('SELECT slot_id FROM appointments WHERE id = ?', (user_id,))
+            appointment = c.fetchone()
+            
+            if appointment:
+                # Delete the appointment
+                c.execute('DELETE FROM appointments WHERE id = ?', (user_id,))
+                
+                # Update the slot to available (booked = 0)
+                c.execute('UPDATE slots SET booked = 0 WHERE id = ?', (appointment['slot_id'],))
+                print("deleted sucessfully")
+        
+        elif user_type == 'slots':
+            # Check if slot has any appointments
+            c.execute('SELECT id FROM appointments WHERE slot_id = ?', (user_id,))
+            appointments = c.fetchall()
+            
+            if appointments:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Cannot delete slot with existing appointments'}), 400
+            
+            # Delete the slot
+            c.execute('DELETE FROM slots WHERE id = ?', (user_id,))
+        
+        elif user_type == 'medical_record':
+            print(f"🔄 Deleting medical record {user_id}")
+            
+            # Check if medical record exists
+            c.execute('SELECT id FROM medical_records WHERE id = ?', (user_id,))
+            record = c.fetchone()
+            
+            if not record:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Medical record not found'}), 404
+            
+            # Delete medical record
+            c.execute('DELETE FROM medical_records WHERE id = ?', (user_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Medical record {user_id} deleted successfully")
+            return jsonify({'success': True, 'message': 'Medical record deleted successfully'})
+        
+        elif user_type == 'prescription':
+            print(f"🔄 Deleting prescription {user_id}")
+            
+            # Check if prescription exists
+            c.execute('SELECT id FROM prescriptions WHERE id = ?', (user_id,))
+            prescription = c.fetchone()
+            
+            if not prescription:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Prescription not found'}), 404
+            
+            # Delete prescription
+            c.execute('DELETE FROM prescriptions WHERE id = ?', (user_id,))
+            
+            conn.commit()
+            conn.close()
+            
+            logger.info(f"Prescription {user_id} deleted successfully")
+            return jsonify({'success': True, 'message': 'Prescription deleted successfully'})
+        
+        elif user_type == 'bills':
+            # Check if bill exists
+            c.execute('SELECT id FROM bills WHERE id = ?', (user_id,))
+            bill = c.fetchone()
+            
+            if not bill:
+                conn.close()
+                return jsonify({'success': False, 'error': 'Bill not found'}), 404
+            
+            # Delete bill
+            c.execute('DELETE FROM bills WHERE id = ?', (user_id,))
+                
+        else:
+            return jsonify({'success': False, 'error': 'Invalid user type'}), 400
+        
+        conn.commit()
+        conn.close()
+        
+        return jsonify({'success': True, 'message': f'{user_type.capitalize()} deleted successfully'})
+    
+    except Exception as e:
+        logger.error(f"Admin delete {user_type} error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
+
+
+@app.route('/admin/doctor/delete/<int:doctor_id>', methods=['POST'])
+def admin_delete_doctor(doctor_id):
+    if 'user_type' not in session or session.get('user_type') != 'admin':
+        return jsonify({'success': False, 'error': 'Unauthorized'})
+    
+    try:
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Get doctor family_id
+        c.execute('SELECT family_id FROM doctors WHERE id = ?', (doctor_id,))
+        doctor = c.fetchone()
+        
+        if doctor:
+            # Delete doctor and related records
+            c.execute('DELETE FROM slots WHERE doctor_id = ?', (doctor_id,))
+            c.execute('DELETE FROM doctors WHERE id = ?', (doctor_id,))
+            c.execute('DELETE FROM families WHERE id = ?', (doctor['family_id'],))
+            
+            conn.commit()
+        
+        conn.close()
+        return jsonify({'success': True})
+    
+    except Exception as e:
+        logger.error(f"Admin delete doctor error: {e}")
+        return jsonify({'success': False, 'error': str(e)})
 
 
 
@@ -1111,6 +2713,8 @@ def api_delete_family_member(member_id):
     finally:
         if conn:
             conn.close()
+
+            
 @app.route('/api/book_appointment', methods=['GET', 'POST'])
 def api_book_appointment():
     if 'family_id' not in session or session.get('user_type') != 'patient':
@@ -1985,7 +3589,49 @@ def api_checkout_appointment(appointment_id):
         if conn:
             conn.close()
 
+@app.route('/api/front_office/pay_bill/<int:bill_id>', methods=['POST'])
+def mark_bill_as_paid(bill_id):
+    try:
+        print(f"=== MARK BILL AS PAID DEBUG ===")
+        print(f"Session data: {dict(session)}")
+        print(f"User type: {session.get('user_type')}")
+        print(f"Bill ID: {bill_id}")
+        
+        # Check if user is front office
+        if session.get('user_type') != 'front_office':
+            print("❌ Unauthorized: User is not front office")
+            return jsonify({'error': 'Unauthorized - Front office access required'}), 401
 
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Check if bill exists
+        c.execute('''SELECT * FROM bills WHERE id = ?''', (bill_id,))
+        bill = c.fetchone()
+        
+        if not bill:
+            conn.close()
+            return jsonify({'error': 'Bill not found'}), 404
+        
+        # Update bill status to Paid and set payment date
+        current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+        c.execute('''UPDATE bills SET status = "Paid", payment_date = ? WHERE id = ?''', 
+                  (current_time, bill_id))
+        conn.commit()
+        conn.close()
+
+        print(f"✅ Bill {bill_id} marked as paid successfully")
+        return jsonify({
+            'success': True, 
+            'message': 'Bill marked as paid successfully',
+            'bill_id': bill_id
+        })
+
+    except Exception as e:
+        print(f"❌ Error marking bill as paid: {str(e)}")
+        import traceback
+        traceback.print_exc()
+        return jsonify({'error': f'Server error: {str(e)}'}), 500
 # @app.route('/api/front_office/checkout_appointment/<int:appointment_id>', methods=['POST'])
 # def front_office_checkout_appointment(appointment_id):
 #     if 'family_id' not in session or session.get('user_type') != 'front_office':
@@ -3609,6 +5255,9 @@ def admin_patients():
         logger.error(f"Admin patients error: {e}")
         return render_template('admin/admin_patients.html', error='Failed to load patients')
 
+
+
+
 @app.route('/admin/patient/delete/<int:patient_id>', methods=['POST'])
 def admin_delete_patient(patient_id):
     if 'user_type' not in session or session.get('user_type') != 'admin':
@@ -3653,6 +5302,7 @@ def admin_doctors():
     except Exception as e:
         logger.error(f"Admin doctors error: {e}")
         return render_template('admin/admin_doctors.html', error='Failed to load doctors')
+    
 @app.route('/admin/doctor/add', methods=['GET', 'POST'])
 def admin_add_doctor():
     if 'user_type' not in session or session.get('user_type') != 'admin':
@@ -3699,33 +5349,6 @@ def admin_add_doctor():
     return render_template('admin/admin_add_doctor.html')
 
 
-@app.route('/admin/doctor/delete/<int:doctor_id>', methods=['POST'])
-def admin_delete_doctor(doctor_id):
-    if 'user_type' not in session or session.get('user_type') != 'admin':
-        return jsonify({'success': False, 'error': 'Unauthorized'})
-    
-    try:
-        conn = get_db()
-        c = conn.cursor()
-        
-        # Get doctor family_id
-        c.execute('SELECT family_id FROM doctors WHERE id = ?', (doctor_id,))
-        doctor = c.fetchone()
-        
-        if doctor:
-            # Delete doctor and related records
-            c.execute('DELETE FROM slots WHERE doctor_id = ?', (doctor_id,))
-            c.execute('DELETE FROM doctors WHERE id = ?', (doctor_id,))
-            c.execute('DELETE FROM families WHERE id = ?', (doctor['family_id'],))
-            
-            conn.commit()
-        
-        conn.close()
-        return jsonify({'success': True})
-    
-    except Exception as e:
-        logger.error(f"Admin delete doctor error: {e}")
-        return jsonify({'success': False, 'error': str(e)})
 
 # Front Office Staff Management
 @app.route('/admin/staff')

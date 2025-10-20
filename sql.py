@@ -48,7 +48,7 @@ print(c.fetchall())
 print("members")
 c.execute("PRAGMA table_info(members);")
 print(c.fetchall())
-print
+print("front_office")
 c.execute("PRAGMA table_info(front_office);")
 print(c.fetchall())
 print("appointments")

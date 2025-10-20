@@ -4,11 +4,11 @@ import { Stethoscope, Search, Plus, Edit, Trash2, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Navbar from '../components/admin/Navbar';
 import Modal from '../components/Modal';
+import AdminModal from '../components/AdminModal';
 import Sidebar from '../components/admin/sidebar';
-import { getAdminDoctordata } from '../services/api';
+import { getAdminDoctordata, addUser, updateUser, deleteUser } from '../services/api';
 
 const Doctors = () => {
-    debugger
   const [doctors, setDoctors] = useState([]);
   const [filteredDoctors, setFilteredDoctors] = useState([]);
   const [searchTerm, setSearchTerm] = useState('');
@@ -19,13 +19,15 @@ const Doctors = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Define user types for this page
+  const userType = 'doctors'; // For UPDATE and DELETE
+  const addUserType = 'doctor'; // For ADD
+
   useEffect(() => {
-    debugger
     fetchDoctors();
   }, []);
 
   const fetchDoctors = async () => {
-    debugger
     try {
       setLoading(true);
       setError(null);
@@ -34,19 +36,17 @@ const Doctors = () => {
       const response = await getAdminDoctordata();
       console.log('✅ Doctors data received:', response);
       
-      // Check if response has success and data array
       if (response.success && response.Doctors) {
         console.log('Raw doctors data:', response.Doctors);
         
-        // Transform the data to match our frontend structure
         const transformedDoctors = response.Doctors.map(doctor => ({
           id: doctor.id,
-          doctor_id: doctor.family_id, // Using family_id as doctor identifier
+          doctor_id: doctor.family_id,
           name: doctor.name,
           specialty: doctor.specialty,
           email: doctor.email,
           phone: doctor.phone,
-          experience: doctor.experience || `${Math.floor(Math.random() * 20) + 1} years` // Fallback if not provided
+          experience: doctor.experience || `${Math.floor(Math.random() * 20) + 1} years`
         }));
         
         setDoctors(transformedDoctors);
@@ -57,7 +57,6 @@ const Doctors = () => {
     } catch (err) {
       console.error('❌ Error fetching doctors:', err);
       setError(err.message || 'Failed to load doctors');
-      // Set empty array as fallback
       setDoctors([]);
       setFilteredDoctors([]);
     } finally {
@@ -84,10 +83,13 @@ const Doctors = () => {
   const handleDelete = async (doctorId) => {
     if (window.confirm('Are you sure you want to delete this doctor?')) {
       try {
-        // Note: You'll need to add a deleteDoctor method to your api.js
-        // await deleteDoctor(doctorId);
-        setDoctors(doctors.filter(d => d.id !== doctorId));
-        console.log('Doctor deleted successfully');
+        const result = await deleteUser(userType, doctorId);
+        if (result.success) {
+          await fetchDoctors();
+          console.log('Doctor deleted successfully');
+        } else {
+          throw new Error(result.error || 'Failed to delete doctor');
+        }
       } catch (err) {
         console.error('Error deleting doctor:', err);
         setError('Failed to delete doctor');
@@ -98,32 +100,42 @@ const Doctors = () => {
   const handleSaveDoctor = async (doctorData) => {
     try {
       if (editingDoctor) {
-        // Update existing doctor
-        // Note: You'll need to add an updateDoctor method to your api.js
-        // await updateDoctor(editingDoctor.id, doctorData);
-        setDoctors(doctors.map(d => d.id === editingDoctor.id ? { ...d, ...doctorData } : d));
+        const result = await updateUser(userType, editingDoctor.id, doctorData);
+        if (result.success) {
+          await fetchDoctors();
+          setShowModal(false);
+          setEditingDoctor(null);
+          console.log('Doctor updated successfully');
+        } else {
+          throw new Error(result.error || 'Failed to update doctor');
+        }
       } else {
-        // Add new doctor
-        // Note: You'll need to add a createDoctor method to your api.js
-        // const newDoctor = await createDoctor(doctorData);
-        const newDoctor = { 
-          ...doctorData, 
-          id: Date.now(),
-          doctor_id: `DOC${Date.now()}`,
-        };
-        setDoctors([...doctors, newDoctor]);
+        const result = await addUser(addUserType, doctorData);
+        if (result.success) {
+          await fetchDoctors();
+          setShowModal(false);
+          alert(`Doctor added successfully!\n\nGenerated Password: ${result.generated_password}\n\nPlease provide this password to the doctor for login.`);
+          console.log('Doctor added successfully');
+        } else {
+          throw new Error(result.error || 'Failed to add doctor');
+        }
       }
-      setShowModal(false);
-      setEditingDoctor(null);
     } catch (err) {
       console.error('Error saving doctor:', err);
-      setError('Failed to save doctor');
+      setError(err.message || 'Failed to save doctor');
     }
   };
 
   const refreshDoctors = () => {
     fetchDoctors();
   };
+
+  const handleAddNew = () => {
+    console.log('➕ Add new doctor button clicked');
+    setEditingDoctor(null);
+    setShowModal(true);
+  };
+
 
   return (
     <div className={`min-h-screen ${isDark ? 'bg-gray-900 text-white' : 'bg-gray-50 text-gray-900'} transition-colors duration-300`}>
@@ -307,25 +319,25 @@ const Doctors = () => {
             )}
 
             {/* Add/Edit Doctor Modal */}
-            <Modal
-              isOpen={showModal}
-              onClose={() => {
-                setShowModal(false);
-                setEditingDoctor(null);
-              }}
-              title={editingDoctor ? 'Edit Doctor' : 'Add New Doctor'}
-              isDark={isDark}
-            >
-              <DoctorForm
-                doctor={editingDoctor}
-                onSave={handleSaveDoctor}
-                onCancel={() => {
-                  setShowModal(false);
-                  setEditingDoctor(null);
-                }}
-                isDark={isDark}
-              />
-            </Modal>
+            <AdminModal
+  isOpen={showModal}
+  onClose={() => {
+    setShowModal(false);
+    setEditingDoctor(null);
+  }}
+  title={editingDoctor ? 'Edit Doctor' : 'Add New Doctor'}
+  isDark={isDark}
+>
+  <DoctorForm
+    doctor={editingDoctor}
+    onSave={handleSaveDoctor}
+    onCancel={() => {
+      setShowModal(false);
+      setEditingDoctor(null);
+    }}
+    isDark={isDark}
+  />
+</AdminModal>
           </main>
         </div>
       </div>

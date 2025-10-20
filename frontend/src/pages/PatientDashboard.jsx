@@ -86,36 +86,74 @@ const PatientDashboard = () => {
     }));
 
   const handleUploadChange = (e) => {
-    const { name, value, files } = e.target;
-    setFormData({ ...formData, [name]: files ? files[0] : value });
-  };
+  const { name, value, files } = e.target;
+  console.log(`📁 Input changed - name: ${name}, value: ${value}, files:`, files);
+  
+  if (files && files[0]) {
+    console.log(`📄 File selected: ${files[0].name}, size: ${files[0].size} bytes`);
+  }
+  
+  setFormData({ ...formData, [name]: files ? files[0] : value });
+};
+const handleUploadSubmit = async (e) => {
+  debugger
+  e.preventDefault();
+  
+  console.log('📝 FormData state:', formData);
+  
+  // Create FormData properly
+  const uploadData = new FormData();
+  
+  // Append each field individually with debugging
+  console.log('🔄 Creating FormData...');
+  
+  uploadData.append('member_id', formData.member_id);
+  console.log('✅ Added member_id:', formData.member_id);
+  
+  uploadData.append('record_type', formData.record_type);
+  console.log('✅ Added record_type:', formData.record_type);
+  
+  uploadData.append('record_date', formData.record_date);
+  console.log('✅ Added record_date:', formData.record_date);
+  
+  uploadData.append('description', formData.description);
+  console.log('✅ Added description:', formData.description);
+  
+  // Only append file if it exists
+  if (formData.record_file) {
+    uploadData.append('record_file', formData.record_file);
+    console.log('✅ Added record_file:', formData.record_file.name);
+  } else {
+    console.log('⚠️ No file selected');
+  }
+  
+  // Debug: Check what's in FormData
+  console.log('🔍 FormData contents:');
+  for (let [key, value] of uploadData.entries()) {
+    console.log(`${key}:`, value);
+  }
 
-  const handleUploadSubmit = async (e) => {
+  try {
     debugger
-    e.preventDefault();
-    const uploadData = new FormData();
+    console.log('🚀 Sending FormData to API...');
+    await uploadMedicalRecord(uploadData);
     
-    // for (const key in formData) {
-    //   uploadData.append(key, formData[key]);
-    // }
-    try {
-      debugger
-      await uploadMedicalRecord(formData);
-      setShowModal(false);
-      const res = await getPatientDashboardData();
-      setData(res);
-      setFormData({ 
-        member_id: '', 
-        record_type: '', 
-        record_date: new Date().toISOString().split('T')[0], 
-        description: '', 
-        record_file: null 
-      });
-    } catch (err) {
-      setError(err);
-    }
-  };
-
+    console.log('✅ Upload successful!');
+    setShowModal(false);
+    const res = await getPatientDashboardData();
+    setData(res);
+    setFormData({ 
+      member_id: '', 
+      record_type: '', 
+      record_date: new Date().toISOString().split('T')[0], 
+      description: '', 
+      record_file: null 
+    });
+  } catch (err) {
+    console.error('❌ Upload failed:', err);
+    setError(err.message || 'Failed to upload medical record');
+  }
+};
   const handleDeleteMember = async (id) => {
     if (window.confirm('Are you sure you want to delete this family member?')) {
       try {
@@ -1004,74 +1042,81 @@ const PatientDashboard = () => {
         <div className="bg-white rounded-xl p-6 w-full max-w-md mx-auto border border-gray-200 shadow-lg">
           <h3 className="text-xl font-bold text-gray-800 mb-4">Upload Medical Record</h3>
           <form onSubmit={handleUploadSubmit}>
-            <div className="mb-4">
-              <select 
-                name="member_id" 
-                onChange={handleUploadChange} 
-                className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white"
-                required
-                value={formData.member_id}
-              >
-                <option value="">Select Family Member</option>
-                {data.family_members.map(member => (
-                  <option key={member.id} value={member.id}>{member.first_name} {member.last_name}</option>
-                ))}
-              </select>
-            </div>
-            <div className="mb-4">
-              <input 
-                name="record_type" 
-                onChange={handleUploadChange} 
-                placeholder="Record Type" 
-                className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
-                required 
-                value={formData.record_type}
-              />
-            </div>
-            <div className="mb-4">
-              <input 
-                name="record_date" 
-                type="date" 
-                value={formData.record_date} 
-                onChange={handleUploadChange} 
-                className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
-                required 
-              />
-            </div>
-            <div className="mb-4">
-              <textarea 
-                name="description" 
-                onChange={handleUploadChange} 
-                placeholder="Description" 
-                className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
-                rows="3"
-                value={formData.description}
-              />
-            </div>
-            <div className="mb-6">
-              <input 
-                name="record_file" 
-                type="file" 
-                onChange={handleUploadChange} 
-                className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
-              />
-            </div>
-            <div className="flex justify-end space-x-3">
-              <button 
-                type="button" 
-                onClick={() => setShowModal(false)} 
-                className="py-2 px-4 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-all duration-200"
-              >
-                Cancel
-              </button>
-              <button 
-                type="submit" 
-                className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm"
-              >
-                Upload
-              </button>
-            </div>
-          </form>
+  <div className="mb-4">
+    <select 
+      name="member_id" 
+      onChange={handleUploadChange} 
+      className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white"
+      required
+      value={formData.member_id}
+    >
+      <option value="">Select Family Member</option>
+      {data.family_members.map(member => (
+        <option key={member.id} value={member.id}>
+          {member.first_name} {member.last_name}
+        </option>
+      ))}
+    </select>
+  </div>
+  
+  <div className="mb-4">
+    <input 
+      name="record_type" 
+      onChange={handleUploadChange} 
+      placeholder="Record Type" 
+      className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
+      required 
+      value={formData.record_type}
+    />
+  </div>
+  
+  <div className="mb-4">
+    <input 
+      name="record_date" 
+      type="date" 
+      value={formData.record_date} 
+      onChange={handleUploadChange} 
+      className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
+      required 
+    />
+  </div>
+  
+  <div className="mb-4">
+    <textarea 
+      name="description" 
+      onChange={handleUploadChange} 
+      placeholder="Description" 
+      className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
+      rows="3"
+      value={formData.description}
+    />
+  </div>
+  
+  <div className="mb-6">
+    <input 
+      name="record_file" 
+      type="file" 
+      onChange={handleUploadChange} 
+      className="w-full p-3 rounded-lg border border-gray-300 outline-none focus:ring-2 focus:ring-blue-500 focus:border-transparent transition-all duration-200 bg-white" 
+    />
+  </div>
+  
+  <div className="flex justify-end space-x-3">
+    <button 
+      type="button" 
+      onClick={() => setShowModal(false)} 
+      className="py-2 px-4 rounded-lg border border-gray-300 text-gray-700 hover:bg-gray-50 transition-all duration-200"
+    >
+      Cancel
+    </button>
+    <button 
+      type="submit" 
+      className="bg-blue-600 text-white py-2 px-4 rounded-lg hover:bg-blue-700 transition-all duration-200 shadow-sm"
+    >
+      Upload
+    </button>
+  </div>
+</form>
         </div>
       </Modal>
 

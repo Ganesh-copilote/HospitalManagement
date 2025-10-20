@@ -33,6 +33,12 @@ import AdminDashboard from './pages/AdminDashboard';
 import Patients from './pages/Patients';
 import Doctors from './pages/Doctor';
 import FrontOffice from './pages/FrontOffice';
+import Appointments from './pages/Appointments';
+import Medical from './pages/Medical';
+import Billing from './pages/Billing';
+import Settings from './pages/Settings';
+import Analytics from './pages/Analytics';
+
 
 function App() {
   return (
@@ -73,7 +79,11 @@ function App() {
         <Route path="/patients" element={<Patients />} />
         <Route path="/Doctors" element={<Doctors />} />
         <Route path="/front-office" element={<FrontOffice />} />
-        
+        <Route path="/appointments" element={<Appointments />} />
+        <Route path="/medical" element={<Medical />} />
+        <Route path="/billing" element={<Billing />} />
+        <Route path="/settings" element={<Settings />} />
+        <Route path="/analytics" element={<Analytics />} />
       </Routes>
     </Router>
   );

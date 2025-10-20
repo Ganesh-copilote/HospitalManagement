@@ -102,6 +102,7 @@ const FrontOfficePayments = () => {
   };
 
   const handleMarkAsPaid = async (billId) => {
+    debugger
     if (window.confirm('Are you sure you want to mark this bill as paid?')) {
       try {
         const result = await markBillAsPaid(billId);

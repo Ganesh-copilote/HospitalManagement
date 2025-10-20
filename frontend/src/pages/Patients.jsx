@@ -4,8 +4,11 @@ import { Users, Search, Plus, Edit, Trash2, Filter } from 'lucide-react';
 import { motion } from 'framer-motion';
 import Navbar from '../components/admin/Navbar';
 import Modal from '../components/Modal';
+import AdminModal from '../components/AdminModal';
+
 import Sidebar from '../components/admin/sidebar';
-import { getAdminPatientData } from '../services/api';
+import PatientForm from '../components/admin/PatientForm';
+import { getAdminPatientData, addUser, updateUser, deleteUser } from '../services/api';
 
 const Patients = () => {
   const [patients, setPatients] = useState([]);
@@ -18,57 +21,61 @@ const Patients = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Define userType inside the component
+  const userType = 'patients'; // For UPDATE and DELETE (plural)
+  const addUserType = 'patient'; // For ADD (singular)
+
   useEffect(() => {
     fetchPatients();
   }, []);
 
   const fetchPatients = async () => {
-  try {
-    setLoading(true);
-    setError(null);
-    console.log('🔄 Fetching patients data from members table...');
-    
-    const response = await getAdminPatientData();
-    console.log('✅ Patients data received:', response);
-    
-    // Check if response has success and family_members array
-    if (response.success && response.family_members) {
-      console.log('Raw patients data:', response.family_members);
+    try {
+      setLoading(true);
+      setError(null);
+      console.log('🔄 Fetching patients data from members table...');
       
-      // Transform the data to match our frontend structure
-      const transformedPatients = response.family_members.map(patient => ({
-        id: patient.id,
-        patient_id: patient.family_id, // Using family_id as patient identifier
-        name: `${patient.first_name} ${patient.last_name}`.trim(),
-        first_name: patient.first_name,
-        last_name: patient.last_name,
-        middle_name: patient.middle_name,
-        age: patient.age,
-        gender: patient.gender,
-        email: patient.email,
-        phone: patient.phone,
-        address: patient.address,
-        aadhar: patient.aadhar,
-        prev_problem: patient.prev_problem,
-        curr_problem: patient.curr_problem,
-        created_date: patient.created_date
-      }));
+      const response = await getAdminPatientData();
+      console.log('✅ Patients data received:', response);
       
-      setPatients(transformedPatients);
-      setFilteredPatients(transformedPatients);
-    } else {
-      throw new Error(response.error || 'No patients data found');
+      // Check if response has success and family_members array
+      if (response.success && response.family_members) {
+        console.log('Raw patients data:', response.family_members);
+        
+        // Transform the data to match our frontend structure
+        const transformedPatients = response.family_members.map(patient => ({
+          id: patient.id,
+          patient_id: patient.family_id,
+          name: `${patient.first_name} ${patient.last_name}`.trim(),
+          first_name: patient.first_name,
+          last_name: patient.last_name,
+          middle_name: patient.middle_name,
+          age: patient.age,
+          gender: patient.gender,
+          email: patient.email,
+          phone: patient.phone,
+          address: patient.address,
+          aadhar: patient.aadhar,
+          prev_problem: patient.prev_problem,
+          curr_problem: patient.curr_problem,
+          created_date: patient.created_date
+        }));
+        
+        setPatients(transformedPatients);
+        setFilteredPatients(transformedPatients);
+      } else {
+        throw new Error(response.error || 'No patients data found');
+      }
+    } catch (err) {
+      console.error('❌ Error fetching patients:', err);
+      setError(err.message || 'Failed to load patients');
+      setPatients([]);
+      setFilteredPatients([]);
+    } finally {
+      setLoading(false);
     }
-  } catch (err) {
-    console.error('❌ Error fetching patients:', err);
-    setError(err.message || 'Failed to load patients');
-    // Set empty array as fallback
-    setPatients([]);
-    setFilteredPatients([]);
-  } finally {
-    setLoading(false);
-  }
-};
+  };
+
   useEffect(() => {
     const filtered = patients.filter(patient =>
       patient.name?.toLowerCase().includes(searchTerm.toLowerCase()) ||
@@ -83,17 +90,32 @@ const Patients = () => {
   }, [searchTerm, patients]);
 
   const handleEdit = (patient) => {
+    debugger
+    console.log('🔄 Edit button clicked for patient:', patient);
+    console.log('📝 Setting editingPatient and showModal to true');
+    
     setEditingPatient(patient);
     setShowModal(true);
+    
+    // Debug: check if state updates
+    setTimeout(() => {
+      console.log('✅ Current state - showModal:', showModal);
+      console.log('✅ Current state - editingPatient:', editingPatient);
+    }, 0);
   };
 
   const handleDelete = async (patientId) => {
+    debugger
     if (window.confirm('Are you sure you want to delete this patient?')) {
       try {
-        // Note: You'll need to add a deletePatient method to your api.js
-        // await deletePatient(patientId);
-        setPatients(patients.filter(p => p.id !== patientId));
-        console.log('Patient deleted successfully');
+        // Pass both userType and userId - use 'patients' for DELETE
+        const result = await deleteUser(userType, patientId);
+        if (result.success) {
+          await fetchPatients();
+          console.log('Patient deleted successfully');
+        } else {
+          throw new Error(result.error || 'Failed to delete patient');
+        }
       } catch (err) {
         console.error('Error deleting patient:', err);
         setError('Failed to delete patient');
@@ -104,32 +126,43 @@ const Patients = () => {
   const handleSavePatient = async (patientData) => {
     try {
       if (editingPatient) {
-        // Update existing patient
-        // Note: You'll need to add an updatePatient method to your api.js
-        // await updatePatient(editingPatient.id, patientData);
-        setPatients(patients.map(p => p.id === editingPatient.id ? { ...p, ...patientData } : p));
+        // Update patient - use 'patients' for UPDATE
+        const result = await updateUser(userType, editingPatient.id, patientData);
+        if (result.success) {
+          await fetchPatients();
+          setShowModal(false);
+          setEditingPatient(null);
+          console.log('Patient updated successfully');
+        } else {
+          throw new Error(result.error || 'Failed to update patient');
+        }
       } else {
-        // Add new patient
-        // Note: You'll need to add a createPatient method to your api.js
-        // const newPatient = await createPatient(patientData);
-        const newPatient = { 
-          ...patientData, 
-          id: Date.now(),
-          patient_id: `FAM${Date.now()}`,
-          name: `${patientData.first_name} ${patientData.last_name}`.trim()
-        };
-        setPatients([...patients, newPatient]);
+        // Add patient - use 'patient' for ADD (singular)
+        const result = await addUser(addUserType, patientData);
+        if (result.success) {
+          await fetchPatients();
+          setShowModal(false);
+          // Show success message with generated password
+          alert(`Patient added successfully!\n\nGenerated Password: ${result.generated_password}\n\nPlease provide this password to the patient for login.`);
+          console.log('Patient added successfully');
+        } else {
+          throw new Error(result.error || 'Failed to add patient');
+        }
       }
-      setShowModal(false);
-      setEditingPatient(null);
     } catch (err) {
       console.error('Error saving patient:', err);
-      setError('Failed to save patient');
+      setError(err.message || 'Failed to save patient');
     }
   };
 
   const refreshPatients = () => {
     fetchPatients();
+  };
+
+  const handleAddNew = () => {
+    console.log('➕ Add new patient button clicked');
+    setEditingPatient(null);
+    setShowModal(true);
   };
 
   return (
@@ -174,7 +207,7 @@ const Patients = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowModal(true)}
+                  onClick={handleAddNew}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
                 >
                   <Plus size={20} />
@@ -342,252 +375,40 @@ const Patients = () => {
             )}
 
             {/* Add/Edit Patient Modal */}
-            <Modal
-              isOpen={showModal}
-              onClose={() => {
-                setShowModal(false);
-                setEditingPatient(null);
-              }}
-              title={editingPatient ? 'Edit Patient' : 'Add New Patient'}
-              isDark={isDark}
-            >
-              <PatientForm
-                patient={editingPatient}
-                onSave={handleSavePatient}
-                onCancel={() => {
-                  setShowModal(false);
-                  setEditingPatient(null);
-                }}
-                isDark={isDark}
-              />
-            </Modal>
+            {/* // Update the modal usage */}
+<AdminModal
+  isOpen={showModal}
+  onClose={() => {
+    console.log('🔒 Modal close triggered');
+    setShowModal(false);
+    setEditingPatient(null);
+  }}
+  title={editingPatient ? 'Edit Patient' : 'Add New Patient'}
+  isDark={isDark}
+>
+  <PatientForm
+    patient={editingPatient}
+    onSave={handleSavePatient}
+    onCancel={() => {
+      console.log('❌ Form cancel triggered');
+      setShowModal(false);
+      setEditingPatient(null);
+    }}
+    isDark={isDark}
+  />
+</AdminModal>
+
+            {/* Temporary Debug Info - Remove after fixing */}
+            <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs z-50">
+              <div>showModal: {showModal ? 'true' : 'false'}</div>
+              <div>editingPatient: {editingPatient ? editingPatient.name : 'null'}</div>
+              <div>userType: {userType}</div>
+              <div>addUserType: {addUserType}</div>
+            </div>
           </main>
         </div>
       </div>
     </div>
-  );
-};
-
-// Patient Form Component
-const PatientForm = ({ patient, onSave, onCancel, isDark }) => {
-  const [formData, setFormData] = useState({
-    first_name: patient?.first_name || '',
-    last_name: patient?.last_name || '',
-    middle_name: patient?.middle_name || '',
-    age: patient?.age || '',
-    gender: patient?.gender || '',
-    email: patient?.email || '',
-    phone: patient?.phone || '',
-    address: patient?.address || '',
-    aadhar: patient?.aadhar || '',
-    prev_problem: patient?.prev_problem || '',
-    curr_problem: patient?.curr_problem || ''
-  });
-
-  const handleSubmit = (e) => {
-    e.preventDefault();
-    onSave(formData);
-  };
-
-  return (
-    <form onSubmit={handleSubmit} className="space-y-4">
-      <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
-        <div>
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            First Name *
-          </label>
-          <input
-            type="text"
-            required
-            value={formData.first_name}
-            onChange={(e) => setFormData({ ...formData, first_name: e.target.value })}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div>
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Last Name *
-          </label>
-          <input
-            type="text"
-            required
-            value={formData.last_name}
-            onChange={(e) => setFormData({ ...formData, last_name: e.target.value })}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div>
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Middle Name
-          </label>
-          <input
-            type="text"
-            value={formData.middle_name}
-            onChange={(e) => setFormData({ ...formData, middle_name: e.target.value })}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div>
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Age
-          </label>
-          <input
-            type="number"
-            value={formData.age}
-            onChange={(e) => setFormData({ ...formData, age: e.target.value })}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div>
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Gender
-          </label>
-          <select
-            value={formData.gender}
-            onChange={(e) => setFormData({ ...formData, gender: e.target.value })}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          >
-            <option value="">Select Gender</option>
-            <option value="Male">Male</option>
-            <option value="Female">Female</option>
-            <option value="Other">Other</option>
-          </select>
-        </div>
-        <div>
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Phone *
-          </label>
-          <input
-            type="tel"
-            required
-            value={formData.phone}
-            onChange={(e) => setFormData({ ...formData, phone: e.target.value })}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Email *
-          </label>
-          <input
-            type="email"
-            required
-            value={formData.email}
-            onChange={(e) => setFormData({ ...formData, email: e.target.value })}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Aadhar Number
-          </label>
-          <input
-            type="text"
-            value={formData.aadhar}
-            onChange={(e) => setFormData({ ...formData, aadhar: e.target.value })}
-            placeholder="12-digit Aadhar number"
-            maxLength="12"
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Address
-          </label>
-          <textarea
-            value={formData.address}
-            onChange={(e) => setFormData({ ...formData, address: e.target.value })}
-            rows={3}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Previous Medical Problem
-          </label>
-          <textarea
-            value={formData.prev_problem}
-            onChange={(e) => setFormData({ ...formData, prev_problem: e.target.value })}
-            rows={2}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-        <div className="md:col-span-2">
-          <label className={`block text-sm font-medium mb-2 ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
-            Current Medical Problem
-          </label>
-          <textarea
-            value={formData.curr_problem}
-            onChange={(e) => setFormData({ ...formData, curr_problem: e.target.value })}
-            rows={2}
-            className={`w-full px-3 py-2 rounded-lg border ${
-              isDark 
-                ? 'bg-gray-700 border-gray-600 text-white' 
-                : 'bg-white border-gray-300 text-gray-900'
-            } focus:outline-none focus:ring-2 focus:ring-blue-500`}
-          />
-        </div>
-      </div>
-      <div className="flex justify-end space-x-3 pt-4">
-        <button
-          type="button"
-          onClick={onCancel}
-          className={`px-4 py-2 rounded-lg ${
-            isDark 
-              ? 'bg-gray-600 hover:bg-gray-500 text-white' 
-              : 'bg-gray-200 hover:bg-gray-300 text-gray-700'
-          } transition-colors duration-200`}
-        >
-          Cancel
-        </button>
-        <button
-          type="submit"
-          className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg transition-colors duration-200"
-        >
-          {patient ? 'Update Patient' : 'Add Patient'}
-        </button>
-      </div>
-    </form>
   );
 };
 

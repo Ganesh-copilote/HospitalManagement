@@ -1,25 +1,74 @@
-import React from 'react';
+import React, { useState } from 'react';
+import { useNavigate, useLocation } from 'react-router-dom';
 import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, 
   Users, 
   UserCheck, 
   Calendar,
+  FileText,
+  DollarSign,
   BarChart3, 
   Settings,
-  X 
+  X,
+  ChevronDown
 } from 'lucide-react';
 
 const menuItems = [
-  { name: 'Dashboard', icon: LayoutDashboard, path: '/admin_dashboard' }, // Update this path
-  { name: 'Patients', icon: Users, path: '/patients' }, // This should match your route
-  { name: 'Doctors', icon: UserCheck, path: '/doctors' },
-  { name: 'Front Office', icon: Calendar, path: '/front-office' },
+  { name: 'Dashboard', icon: LayoutDashboard, path: '/admin_dashboard' },
+  { 
+    name: 'User Management', 
+    icon: Users, 
+    children: [
+      { name: 'Patients', icon: Users, path: '/patients' },
+      { name: 'Doctors', icon: UserCheck, path: '/doctors' },
+      { name: 'Front Office', icon: Calendar, path: '/front-office' },
+    ]
+  },
+  { name: 'Appointments & Slots', icon: Calendar, path: '/appointments' },
+  { name: 'Medical & Prescriptions', icon: FileText, path: '/medical' },
+  { name: 'Billing & Payments', icon: DollarSign, path: '/billing' },
   { name: 'Analytics', icon: BarChart3, path: '/analytics' },
   { name: 'Settings', icon: Settings, path: '/settings' },
 ];
 
-const Sidebar = ({ isOpen, onClose, currentPath, onNavigate, isDark, onThemeToggle }) => {
+const Sidebar = ({ isOpen, onClose, isDark, onThemeToggle }) => {
+  const navigate = useNavigate();
+  const location = useLocation();
+  const currentPath = location.pathname; // ✅ Tracks the active route
+
+  const [expandedItems, setExpandedItems] = useState({
+    'User Management': true // Keep User Management expanded by default
+  });
+
+  const toggleExpanded = (itemName) => {
+    setExpandedItems(prev => ({
+      ...prev,
+      [itemName]: !prev[itemName]
+    }));
+  };
+
+  const isItemActive = (item) => {
+    if (item.children) {
+      return item.children.some(child => currentPath === child.path);
+    }
+    return currentPath === item.path;
+  };
+
+  const handleItemClick = (item) => {
+    if (item.children) {
+      toggleExpanded(item.name);
+    } else {
+      navigate(item.path);
+      if (window.innerWidth < 1024) onClose();
+    }
+  };
+
+  const handleChildClick = (childPath) => {
+    navigate(childPath);
+    if (window.innerWidth < 1024) onClose();
+  };
+
   return (
     <>
       {/* Overlay for mobile */}
@@ -67,19 +116,22 @@ const Sidebar = ({ isOpen, onClose, currentPath, onNavigate, isDark, onThemeTogg
         </div>
 
         {/* Navigation */}
-        <nav className="p-4 flex-1">
+        <nav className="p-4 flex-1 overflow-y-auto">
           <ul className="space-y-2">
             {menuItems.map((item) => {
               const Icon = item.icon;
-              const isActive = currentPath === item.path;
-              
+              const isActive = isItemActive(item);
+              const isExpanded = expandedItems[item.name];
+              const hasChildren = !!item.children;
+
               return (
                 <li key={item.name}>
+                  {/* Parent Item */}
                   <motion.button
                     whileHover={{ scale: 1.02 }}
                     whileTap={{ scale: 0.98 }}
-                    onClick={() => onNavigate(item.path)}
-                    className={`w-full flex items-center space-x-3 px-4 py-3 rounded-xl text-left transition-all duration-200 ${
+                    onClick={() => handleItemClick(item)}
+                    className={`w-full flex items-center justify-between px-4 py-3 rounded-xl text-left transition-all duration-200 ${
                       isActive 
                         ? 'bg-blue-600 text-white shadow-md' 
                         : isDark 
@@ -87,9 +139,60 @@ const Sidebar = ({ isOpen, onClose, currentPath, onNavigate, isDark, onThemeTogg
                         : 'text-gray-600 hover:bg-gray-50 hover:text-blue-600'
                     }`}
                   >
-                    <Icon size={20} />
-                    <span className="font-medium">{item.name}</span>
+                    <div className="flex items-center space-x-3">
+                      <Icon size={20} />
+                      <span className="font-medium">{item.name}</span>
+                    </div>
+
+                    {hasChildren && (
+                      <motion.div
+                        animate={{ rotate: isExpanded ? 0 : -90 }}
+                        transition={{ duration: 0.2 }}
+                      >
+                        <ChevronDown size={16} />
+                      </motion.div>
+                    )}
                   </motion.button>
+
+                  {/* Children Items */}
+                  {hasChildren && (
+                    <AnimatePresence>
+                      {isExpanded && (
+                        <motion.ul
+                          initial={{ opacity: 0, height: 0 }}
+                          animate={{ opacity: 1, height: 'auto' }}
+                          exit={{ opacity: 0, height: 0 }}
+                          transition={{ duration: 0.2 }}
+                          className="ml-4 mt-1 space-y-1 overflow-hidden"
+                        >
+                          {item.children.map((child) => {
+                            const ChildIcon = child.icon;
+                            const isChildActive = currentPath === child.path;
+
+                            return (
+                              <li key={child.name}>
+                                <motion.button
+                                  whileHover={{ scale: 1.02 }}
+                                  whileTap={{ scale: 0.98 }}
+                                  onClick={() => handleChildClick(child.path)}
+                                  className={`w-full flex items-center space-x-3 px-4 py-2 rounded-lg text-left transition-all duration-200 ${
+                                    isChildActive
+                                      ? 'bg-blue-500 text-white shadow-sm' 
+                                      : isDark 
+                                      ? 'text-gray-400 hover:bg-gray-700 hover:text-blue-300' 
+                                      : 'text-gray-500 hover:bg-gray-100 hover:text-blue-500'
+                                  }`}
+                                >
+                                  <ChildIcon size={16} />
+                                  <span className="text-sm font-medium">{child.name}</span>
+                                </motion.button>
+                              </li>
+                            );
+                          })}
+                        </motion.ul>
+                      )}
+                    </AnimatePresence>
+                  )}
                 </li>
               );
             })}

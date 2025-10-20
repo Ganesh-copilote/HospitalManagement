@@ -4,8 +4,10 @@ import { Users, Search, Plus, Edit, Trash2, Filter, Mail, Phone, MapPin } from '
 import { motion } from 'framer-motion';
 import Navbar from '../components/admin/Navbar';
 import Modal from '../components/Modal';
+import AdminModal from '../components/AdminModal';
+
 import Sidebar from '../components/admin/sidebar';
-import { getAdminFrontOfficedata } from '../services/api';
+import { getAdminFrontOfficedata, addUser, updateUser, deleteUser } from '../services/api';
 
 const FrontOffice = () => {
   const [frontOfficeStaff, setFrontOfficeStaff] = useState([]);
@@ -18,13 +20,15 @@ const FrontOffice = () => {
   const [loading, setLoading] = useState(true);
   const [error, setError] = useState(null);
 
+  // Define user types for this page
+  const userType = 'frontoffice'; // For UPDATE and DELETE
+  const addUserType = 'frontoffice'; // For ADD
+
   useEffect(() => {
-    debugger
     fetchFrontOfficeStaff();
   }, []);
 
   const fetchFrontOfficeStaff = async () => {
-    debugger
     try {
       setLoading(true);
       setError(null);
@@ -34,8 +38,6 @@ const FrontOffice = () => {
       console.log('✅ Front office staff data received:', response);
 
       if (response.success && response.FrontOffice) {
-        // Assuming response.data contains front office staff array
-        // const staffData = Array.isArray(response.FrontOffice) ? response.Frontoffice : response.FrontOffice.staff || response.data.front_office_staff || [];
         const staffData = response.FrontOffice;
         const transformedStaff = staffData.map(staff => ({
           id: staff.id,
@@ -85,10 +87,13 @@ const FrontOffice = () => {
   const handleDelete = async (staffId) => {
     if (window.confirm('Are you sure you want to delete this staff member?')) {
       try {
-        // Note: You'll need to add a deleteStaff method to your api.js
-        // await deleteStaff(staffId);
-        setFrontOfficeStaff(frontOfficeStaff.filter(s => s.id !== staffId));
-        console.log('Staff member deleted successfully');
+        const result = await deleteUser(userType, staffId);
+        if (result.success) {
+          await fetchFrontOfficeStaff();
+          console.log('Staff member deleted successfully');
+        } else {
+          throw new Error(result.error || 'Failed to delete staff member');
+        }
       } catch (err) {
         console.error('Error deleting staff:', err);
         setError('Failed to delete staff member');
@@ -99,30 +104,40 @@ const FrontOffice = () => {
   const handleSaveStaff = async (staffData) => {
     try {
       if (editingStaff) {
-        // Update existing staff
-        // await updateStaff(editingStaff.id, staffData);
-        setFrontOfficeStaff(frontOfficeStaff.map(s => s.id === editingStaff.id ? { ...s, ...staffData } : s));
+        const result = await updateUser(userType, editingStaff.id, staffData);
+        if (result.success) {
+          await fetchFrontOfficeStaff();
+          setShowModal(false);
+          setEditingStaff(null);
+          console.log('Staff member updated successfully');
+        } else {
+          throw new Error(result.error || 'Failed to update staff member');
+        }
       } else {
-        // Add new staff
-        const newStaff = { 
-          ...staffData, 
-          id: Date.now(),
-          staff_id: `FO${Date.now()}`,
-          name: `${staffData.first_name} ${staffData.last_name}`.trim(),
-          status: 'Active'
-        };
-        setFrontOfficeStaff([...frontOfficeStaff, newStaff]);
+        const result = await addUser(addUserType, staffData);
+        if (result.success) {
+          await fetchFrontOfficeStaff();
+          setShowModal(false);
+          alert(`Staff member added successfully!\n\nGenerated Password: ${result.generated_password}\n\nPlease provide this password to the staff member for login.`);
+          console.log('Staff member added successfully');
+        } else {
+          throw new Error(result.error || 'Failed to add staff member');
+        }
       }
-      setShowModal(false);
-      setEditingStaff(null);
     } catch (err) {
       console.error('Error saving staff:', err);
-      setError('Failed to save staff member');
+      setError(err.message || 'Failed to save staff member');
     }
   };
 
   const refreshStaff = () => {
     fetchFrontOfficeStaff();
+  };
+
+  const handleAddNew = () => {
+    console.log('➕ Add new staff member button clicked');
+    setEditingStaff(null);
+    setShowModal(true);
   };
 
   return (
@@ -167,7 +182,7 @@ const FrontOffice = () => {
                 <motion.button
                   whileHover={{ scale: 1.05 }}
                   whileTap={{ scale: 0.95 }}
-                  onClick={() => setShowModal(true)}
+                  onClick={handleAddNew}
                   className="bg-blue-600 hover:bg-blue-700 text-white px-4 py-2 rounded-lg flex items-center space-x-2"
                 >
                   <Plus size={20} />
@@ -340,25 +355,25 @@ const FrontOffice = () => {
             )}
 
             {/* Add/Edit Staff Modal */}
-            <Modal
-              isOpen={showModal}
-              onClose={() => {
-                setShowModal(false);
-                setEditingStaff(null);
-              }}
-              title={editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}
-              isDark={isDark}
-            >
-              <StaffForm
-                staff={editingStaff}
-                onSave={handleSaveStaff}
-                onCancel={() => {
-                  setShowModal(false);
-                  setEditingStaff(null);
-                }}
-                isDark={isDark}
-              />
-            </Modal>
+<AdminModal
+  isOpen={showModal}
+  onClose={() => {
+    setShowModal(false);
+    setEditingStaff(null);
+  }}
+  title={editingStaff ? 'Edit Staff Member' : 'Add New Staff Member'}
+  isDark={isDark}
+>
+  <StaffForm
+    staff={editingStaff}
+    onSave={handleSaveStaff}
+    onCancel={() => {
+      setShowModal(false);
+      setEditingStaff(null);
+    }}
+    isDark={isDark}
+  />
+</AdminModal>
           </main>
         </div>
       </div>

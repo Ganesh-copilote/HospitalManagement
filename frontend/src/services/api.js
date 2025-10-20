@@ -235,19 +235,29 @@ export const cancelAppointment = async (id) => {
     throw handleError(error);
   }
 };
-
 export const uploadMedicalRecord = async (formData) => {
   debugger
   try {
+    console.log('🔄 Frontend: Uploading medical record with data:');
+    
+    // Log FormData contents for debugging
+    for (let [key, value] of formData.entries()) {
+      console.log(`${key}:`, value);
+    }
+
     const res = await api.post('/api/upload_medical_record', formData, {
-      headers: { 'Content-Type': 'multipart/form-data' },
+      headers: { 
+        'Content-Type': 'multipart/form-data',
+      },
     });
+    console.log('✅ Frontend: Upload medical record response:', res.data);
     return res.data;
   } catch (error) {
+    console.error('❌ Frontend: Upload medical record API call failed:', error);
+    console.error('Error details:', error.response?.data);
     throw handleError(error);
   }
 };
-
 export const deleteMedicalRecord = async (id) => {
   debugger
   try {
@@ -517,6 +527,7 @@ export const createBill = async (data) => {
 };
 
 export const markBillAsPaid = async (billId) => {
+  debugger
   try {
     console.log(`🔄 Frontend: Marking bill ${billId} as paid`);
     const response = await api.post(`/api/front_office/pay_bill/${billId}`);
@@ -575,6 +586,285 @@ export const getAdminFrontOfficedata = async (id) => {
     throw handleError(error);
   }
 };
+
+
+
+
+// Add these to your api.js file
+
+
+
+// Add new patient
+export const addPatient = async (data) => {
+  debugger
+  try {
+    console.log('🔄 Frontend: Adding new patient with data:', data);
+    const response = await api.post('/api/admin/patients/add', data);
+    console.log('✅ Frontend: Add patient response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Add patient API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Update patient
+export const updatePatient = async (patientId, data) => {
+  debugger
+  try {
+    console.log(`🔄 Frontend: Updating patient ${patientId} with data:`, data);
+    const response = await api.put(`/api/admin/patients/${patientId}`, data);
+    console.log('✅ Frontend: Update patient response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Update patient API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Delete patient
+export const deletePatient = async (patientId) => {
+  try {
+    debugger
+    console.log(`🔄 Frontend: Deleting patient ${patientId}`);
+    const response = await api.delete(`/api/admin/patients/delete/${patientId}`);
+    console.log('✅ Frontend: Delete patient response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Delete patient API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+
+// Use the same functions for all user types
+// Add user (patient, doctor, or frontoffice)
+export const addUser = async (userType, data) => {
+  try {
+    console.log(`🔄 Frontend: Adding new ${userType} with data:`, data);
+    const response = await api.post('/api/admin/users/add', {
+      ...data,
+      user_type: userType  // 'patient', 'doctor', or 'frontoffice'
+    });
+    console.log(`✅ Frontend: Add ${userType} response:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Frontend: Add ${userType} API call failed:`, error);
+    throw handleError(error);
+  }
+};
+
+// Update user
+export const updateUser = async (userType, userId, data) => {
+  debugger
+  try {
+    console.log(`🔄 Frontend: Updating ${userType} ${userId} with data:`, data);
+    const response = await api.put(`/api/admin/users/${userType}/${userId}`, data);
+    console.log(`✅ Frontend: Update ${userType} response:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Frontend: Update ${userType} API call failed:`, error);
+    throw handleError(error);
+  }
+};
+
+// Delete user
+// export const deleteUser = async (userType, userId) => {
+//   debugger
+//   try {
+//     console.log(`🔄 Frontend: Deleting ${userType} ${userId}`);
+//     const response = await api.delete(`/api/admin/users/${userType}/${userId}`);
+//     console.log(`✅ Frontend: Delete ${userType} response:`, response.data);
+//     return response.data;
+//   } catch (error) {
+//     console.error(`❌ Frontend: Delete ${userType} API call failed:`, error);
+//     throw handleError(error);
+//   }
+// };
+
+
+export const deleteUser = async (userType, userId) => {
+  debugger
+  try {
+    console.log(`🔄 Frontend: Deleting ${userType} ${userId}`);
+    const response = await api.delete(`/api/admin/users/${userType}/${userId}`);
+    console.log(`✅ Frontend: Delete ${userType} response:`, response.data);
+    return response.data;
+  } catch (error) {
+    console.error(`❌ Frontend: Delete ${userType} API call failed:`, error);
+    throw handleError(error);
+  }
+};
+
+
+
+// Admin Appointments APIs
+export const getAdminAppointments = async () => {
+  try {
+    debugger
+    console.log('🔄 Frontend: Fetching admin appointments data...');
+    const response = await api.get('/api/admin/appointments');
+    console.log('✅ Frontend: Admin appointments data received:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Get admin appointments API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+export const getAdminSlots = async () => {
+  try {
+    debugger
+    console.log('🔄 Frontend: Fetching admin slots data...');
+    const response = await api.get('/api/admin/slots');
+    console.log('✅ Frontend: Admin slots data received:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Get admin slots API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+
+
+// Add appointment (for admin)
+export const addAppointment = async (data) => {
+  try {
+    debugger
+    console.log('🔄 Frontend: Adding appointment with data:', data);
+    const response = await api.post('/api/admin/appointments/add', data);
+    console.log('✅ Frontend: Add appointment response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Add appointment API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Update appointment (for admin)
+export const updateAppointment = async (appointmentId, data) => {
+  try {
+    debugger
+    console.log(`🔄 Frontend: Updating appointment ${appointmentId} with data:`, data);
+    const response = await api.put(`/api/admin/appointments/${appointmentId}`, data);
+    console.log('✅ Frontend: Update appointment response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Update appointment API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Delete appointment (for admin)
+export const deleteAppointment = async (appointmentId) => {
+  try {
+    debugger
+    console.log(`🔄 Frontend: Deleting appointment ${appointmentId}`);
+    const response = await api.delete(`/api/admin/appointments/${appointmentId}`);
+    console.log('✅ Frontend: Delete appointment response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Delete appointment API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Add slot (for admin)
+export const addSlot = async (data) => {
+  try {
+    debugger
+    console.log('🔄 Frontend: Adding slot with data:', data);
+    const response = await api.post('/api/admin/slots/add', data);
+    console.log('✅ Frontend: Add slot response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Add slot API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Update slot (for admin)
+export const updateSlot = async (slotId, data) => {
+  try {
+    debugger
+    console.log(`🔄 Frontend: Updating slot ${slotId} with data:`, data);
+    const response = await api.put(`/api/admin/slots/${slotId}`, data);
+    console.log('✅ Frontend: Update slot response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Update slot API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Delete slot (for admin)
+export const deleteSlot = async (slotId) => {
+  try {
+    debugger
+    console.log(`🔄 Frontend: Deleting slot ${slotId}`);
+    const response = await api.delete(`/api/admin/slots/${slotId}`);
+    console.log('✅ Frontend: Delete slot response:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Delete slot API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+
+// Medical Records API methods - GET only (using existing unified API for CRUD)
+export const getAdminMedicalRecords = async () => {
+  try {
+    console.log('🔄 Frontend: Fetching admin medical records data...');
+    const response = await api.get('/api/admin/medical_records');
+    console.log('✅ Frontend: Admin medical records data received:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Get admin medical records API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+export const getAdminPrescriptions = async () => {
+  try {
+    console.log('🔄 Frontend: Fetching admin prescriptions data...');
+    const response = await api.get('/api/admin/prescriptions');
+    console.log('✅ Frontend: Admin prescriptions data received:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Get admin prescriptions API call failed:', error);
+    throw handleError(error);
+  }
+};
+
+// Add these functions to your api.js
+
+// const hel = async () => {
+//   try {
+//     debugger
+//     const res = await api.get(`/api/admin/appointments`);
+//     console.log("data come api.js", res.data)
+//     return res.data;
+//   } catch (error) {
+//     throw handleError(error);
+//   }
+// };
+
+// const getAdminSlots = async () => {
+//   try {
+//     debugger
+//     const res = await api.get(`/api/admin/slots`);
+//     console.log("slots data come api.js", res.data)
+//     return res.data;
+//   } catch (error) {
+//     throw handleError(error);
+//   }
+// };
+
+
+
+
+
 // Data Provider
 // export const dataProvider = {
 //   getList: async (resource, params) => {
