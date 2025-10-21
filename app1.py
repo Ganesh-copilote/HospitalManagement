@@ -52,22 +52,55 @@ def add_cors_headers(response):
     response.headers['Access-Control-Allow-Headers'] = 'Content-Type, Authorization'
     response.headers['Access-Control-Allow-Methods'] = 'GET,POST,PUT,DELETE,OPTIONS'
     return response
+
+
+def generate_slots_for_doctor(doctor_id, days):
+    print("calling generate_slots_for_doctor")
+    from datetime import datetime, timedelta
+
+    slots = []
+    start_date = datetime.now().date()
+
+    for i in range(days):
+        current_date = start_date + timedelta(days=i)
+        day_of_week = current_date.weekday()  # 0=Mon, 6=Sun
+
+        if day_of_week < 5:  # Weekdays
+            hours = list(range(10, 13)) + list(range(14, 18))
+        else:  # Weekends
+            hours = list(range(10, 13))
+
+        for hour in hours:
+            for minute in [0, 30]:
+                slot_time = datetime.combine(current_date, datetime.min.time()).replace(
+                    hour=hour, minute=minute, second=0
+                )
+                slots.append(Slot(
+                    doctor_id=doctor_id,
+                    slot_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    booked=0
+                ))
+
+    db.session.add_all(slots)
+    db.session.commit()
+    print(f"✅ Inserted {len(slots)} slots for doctor {doctor_id}")
+
+
 from flask import make_response
 
 # Add these imports at the top
 import hashlib
 from werkzeug.security import generate_password_hash, check_password_hash
-
-# Add this to app1.py
 @app.route('/api/available_slots', methods=['GET'])
 def api_available_slots():
     print("=== /api/available_slots GET endpoint called ===")
-   
+
     doctor_id = request.args.get('doctor_id')
     date = request.args.get('date')
-   
+
     print(f"🔍 Request parameters - Doctor: {doctor_id}, Date: {date}")
-   
+
+    # --- Validate inputs ---
     if not doctor_id or not date:
         error_msg = 'Doctor ID and date are required'
         print(f"❌ Missing parameters: {error_msg}")
@@ -75,78 +108,101 @@ def api_available_slots():
 
     try:
         # Validate date format
-        datetime.strptime(date, '%Y-%m-%d')
-        start_datetime = f"{date} 00:00:00"
-        end_datetime = f"{date} 23:59:59"
-        print(f"📅 Fetching slots for date range: {start_datetime} to {end_datetime}")
+        target_date = datetime.strptime(date, '%Y-%m-%d').date()
+        current_datetime = datetime.now()
+        current_date = current_datetime.date()
+        current_time = current_datetime.time()
+
+        print(f"📅 Current date: {current_date}, Target date: {target_date}")
+        print(f"⏰ Current time: {current_time}")
 
         conn = get_db()
         c = conn.cursor()
 
-        # Verify doctor exists
+        # --- Verify doctor exists ---
         c.execute('SELECT id, name, specialty FROM doctors WHERE id = ?', (doctor_id,))
         doctor = c.fetchone()
         if not doctor:
-            error_msg = f"Doctor ID {doctor_id} not found"
+            conn.close()
+            error_msg = f"Doctor with ID {doctor_id} not found"
             print(f"❌ {error_msg}")
             return jsonify({'error': error_msg}), 404
 
-        print(f"👨‍⚕️ Doctor found: {doctor['name']} (ID: {doctor_id}, Specialty: {doctor['specialty']})")
+        print(f"👨‍⚕️ Doctor found: {doctor['name']} ({doctor['specialty']})")
 
-        # Check all slots for the doctor and date
-        c.execute('SELECT id, slot_time FROM slots WHERE doctor_id = ? AND slot_time BETWEEN ? AND ?', 
-                 (doctor_id, start_datetime, end_datetime))
-        all_slots = c.fetchall()
-        print(f"📋 All slots for doctor {doctor_id} on {date}: {all_slots}")
+        # --- Fetch available (unbooked) slots ---
+        c.execute('''
+            SELECT s.id, s.slot_time, d.name AS doctor_name, d.specialty
+            FROM slots s
+            JOIN doctors d ON s.doctor_id = d.id
+            WHERE s.doctor_id = ?
+            AND STRFTIME('%Y-%m-%d', s.slot_time) = ?
+            AND s.id NOT IN (
+                SELECT slot_id FROM appointments WHERE status IN ('Scheduled', 'Confirmed')
+            )
+            AND s.booked = 0
+            ORDER BY s.slot_time
+        ''', (doctor_id, date))
 
-        # Get available slots
-        c.execute('''SELECT s.id, s.slot_time, d.name as doctor_name, d.specialty
-                     FROM slots s
-                     JOIN doctors d ON s.doctor_id = d.id
-                     WHERE s.doctor_id = ?
-                     AND s.slot_time BETWEEN ? AND ?
-                     AND s.id NOT IN (
-                         SELECT slot_id FROM appointments WHERE status IN ('Scheduled', 'Confirmed')
-                     )
-                     ORDER BY s.slot_time''',
-                 (doctor_id, start_datetime, end_datetime))
-       
-        slots_data = c.fetchall()
-        print(f"📋 Raw available slots: {slots_data}")
-        slots = [dict(row) for row in slots_data]
-       
-        print(f"✅ Found {len(slots)} available slots")
-       
-        # Format the slots for frontend
+        available_slots = c.fetchall()
+        print(f"🟢 Found {len(available_slots)} unbooked slots for doctor {doctor_id} on {date}")
+
         formatted_slots = []
-        for slot in slots:
+        for slot in available_slots:
+            slot = dict(slot)
+            slot_time = slot['slot_time']
+
             try:
-                dt = datetime.strptime(slot['slot_time'], '%Y-%m-%d %H:%M:%S')
+                # Handle both formats
+                if slot_time.count(':') == 2:
+                    dt = datetime.strptime(slot_time.strip(), '%Y-%m-%d %H:%M:%S')
+                elif slot_time.count(':') == 1:
+                    dt = datetime.strptime(slot_time.strip(), '%Y-%m-%d %H:%M')
+                else:
+                    print(f"⚠️ Unexpected format: {slot_time}")
+                    continue
+
+                slot_datetime = dt
+                slot_date = slot_datetime.date()
+                slot_time_only = slot_datetime.time()
+
+                # Filter out past slots for current day
+                if slot_date == current_date and slot_time_only <= current_time:
+                    print(f"⏰ Skipping past slot: {slot_time} (current time: {current_time})")
+                    continue
+
                 formatted_slots.append({
                     'id': slot['id'],
-                    'slot_time': slot['slot_time'],
+                    'slot_time': slot_time,
                     'display': dt.strftime('%H:%M'),
                     'date': dt.strftime('%Y-%m-%d'),
                     'time': dt.strftime('%H:%M'),
                     'doctor_name': slot['doctor_name'],
-                    'specialty': slot['specialty']
+                    'specialty': slot['specialty'],
+                    'formatted_display': f"{dt.strftime('%H:%M')} - Dr. {slot['doctor_name']}"
                 })
             except Exception as e:
-                print(f"⚠️ Error formatting slot {slot}: {e}")
-                formatted_slots.append(slot)
-        
+                print(f"⚠️ Error formatting slot {slot_time}: {e}")
+
         conn.close()
-        print(f"📤 Returning {len(formatted_slots)} formatted slots: {formatted_slots}")
+
+        # --- If no slots found ---
+        if len(formatted_slots) == 0:
+            print(f"🚫 No available slots found for {date} (Doctor ID: {doctor_id})")
+        else:
+            print(f"📤 Returning {len(formatted_slots)} available slots")
+
         return jsonify(formatted_slots)
-    
+
     except ValueError as ve:
-        print(f"❌ Invalid date format: {str(ve)}")
+        print(f"❌ Invalid date format: {ve}")
         return jsonify({'error': 'Invalid date format. Use YYYY-MM-DD'}), 400
+
     except Exception as e:
         print(f"❌ ERROR in available slots API: {str(e)}")
+        import traceback
         traceback.print_exc()
         return jsonify({'error': 'Failed to load available slots'}), 500
-    
 
 @app.route('/api/upload_medical_record', methods=['POST'])
 def upload_medical_record():
@@ -2714,9 +2770,9 @@ def api_delete_family_member(member_id):
         if conn:
             conn.close()
 
-            
 @app.route('/api/book_appointment', methods=['GET', 'POST'])
 def api_book_appointment():
+    # generate_slots_for_doctor(doctor_id=3,days=7)
     if 'family_id' not in session or session.get('user_type') != 'patient':
         return jsonify({'error': 'Unauthorized'}), 401
 
@@ -2735,52 +2791,65 @@ def api_book_appointment():
             c.execute('SELECT id, first_name, last_name FROM members WHERE family_id = ?', (uid,))
             members = [dict(row) for row in c.fetchall()]
             print(f"👥 Family members found: {len(members)}")
-            for i, member in enumerate(members):
-                print(f"   {i+1}. {member['first_name']} {member['last_name']} (ID: {member['id']})")
 
             # Get available doctors
             print("🩺 Fetching doctors...")
             c.execute("SELECT id, name, specialty FROM doctors")
             doctors = [dict(row) for row in c.fetchall()]
             print(f"👨‍⚕️ Doctors found: {len(doctors)}")
-            for i, doctor in enumerate(doctors):
-                print(f"   {i+1}. Dr. {doctor['name']} - {doctor['specialty']} (ID: {doctor['id']})")
 
-            # Get available slots (future slots that are not booked)
+            # Get available slots - ONLY FUTURE SLOTS that are NOT booked
             current_time = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             print(f"⏰ Current time: {current_time}")
-            print("📅 Fetching available slots...")
+            print("📅 Fetching available slots (future + not booked)...")
             
-            c.execute('''SELECT s.id, s.slot_time, d.name as doctor_name, d.specialty
+            # Get slots that are in future AND not booked (using both methods for safety)
+            c.execute('''SELECT s.id, s.slot_time, d.name as doctor_name, d.specialty, d.id as doctor_id
                          FROM slots s 
                          JOIN doctors d ON s.doctor_id = d.id 
-                         WHERE s.slot_time > ? AND s.id NOT IN (
-                             SELECT slot_id FROM appointments WHERE status = "Scheduled"
+                         WHERE s.slot_time > ? 
+                         AND s.booked = 0
+                         AND s.id NOT IN (
+                             SELECT slot_id FROM appointments WHERE status IN ('Scheduled', 'Confirmed')
                          )
-                         ORDER BY s.slot_time''', (current_time,))
+                         ORDER BY s.slot_time, d.name''', (current_time,))
             
-            slots_data = c.fetchall()
+            available_slots = c.fetchall()
+            print(f"🎯 Available slots found: {len(available_slots)}")
+            
             slots = []
-            print(f"🎯 Raw slots data from database: {len(slots_data)} records")
-            
-            for i, row in enumerate(slots_data):
+            for i, row in enumerate(available_slots):
                 slot = dict(row)
                 print(f"   Slot {i+1} raw: {slot}")
                 
                 # Format the slot_time for frontend display
                 slot_time = slot['slot_time']
                 try:
-                    dt = datetime.strptime(slot_time, '%Y-%m-%d %H:%M:%S')
+                    # Try different time formats
+                    if ':' in slot_time and slot_time.count(':') == 2:
+                        dt = datetime.strptime(slot_time, '%Y-%m-%d %H:%M:%S')
+                    elif ':' in slot_time and slot_time.count(':') == 1:
+                        dt = datetime.strptime(slot_time, '%Y-%m-%d %H:%M')
+                    else:
+                        print(f"   ⚠️ Unknown time format: {slot_time}")
+                        continue  # Skip invalid formats
+                    
+                    # Only include slots that are in the future
+                    if dt <= datetime.now():
+                        print(f"   ⏰ Skipping past slot: {slot_time}")
+                        continue
+                    
                     slot['date'] = dt.strftime('%Y-%m-%d')
                     slot['time'] = dt.strftime('%H:%M')
                     slot['display'] = f"{dt.strftime('%Y-%m-%d %H:%M')} - Dr. {slot['doctor_name']} ({slot['specialty']})"
-                    print(f"   ✅ Formatted: {slot['display']}")
+                    slot['formatted_time'] = dt.strftime('%H:%M')
+                    print(f"   ✅ Available slot: {slot['display']}")
+                    
+                    slots.append(slot)
+                    
                 except Exception as e:
-                    print(f"   ❌ Error formatting slot time: {e}")
-                    slot['display'] = slot_time
-                    print(f"   Using raw: {slot['display']}")
-                
-                slots.append(slot)
+                    print(f"   ❌ Error formatting slot time {slot_time}: {e}")
+                    continue  # Skip this slot
 
             conn.close()
 
@@ -2789,15 +2858,14 @@ def api_book_appointment():
                 'success': True,
                 'members': members,
                 'doctors': doctors,
-                'slots': slots
+                'slots': slots,
+                'debug': {
+                    'current_time': current_time,
+                    'slots_found': len(slots)
+                }
             }
 
-            print("\n📦 FINAL RESPONSE DATA:")
-            print(f"   Members: {len(members)} items")
-            print(f"   Doctors: {len(doctors)} items") 
-            print(f"   Slots: {len(slots)} items")
-            print(f"   Sample slot: {slots[0] if slots else 'No slots'}")
-            
+            print(f"\n📦 FINAL: Found {len(slots)} available future slots")
             print("✅ Sending response to frontend...")
             return jsonify(response_data)
 
@@ -2806,7 +2874,6 @@ def api_book_appointment():
             import traceback
             print(f"🔍 Full traceback:\n{traceback.format_exc()}")
             return jsonify({'error': 'Failed to load appointment data'}), 500
-
     elif request.method == 'POST':
         print("=== /api/book_appointment POST endpoint called ===")
         print(f"Session data: family_id={session.get('family_id')}, user_type={session.get('user_type')}")
@@ -2844,7 +2911,22 @@ def api_book_appointment():
             print(f"✅ Slot found: {slot['slot_time']} for doctor {slot['doctor_id']}")
 
             # Check if slot is in the future
-            slot_time = datetime.strptime(slot['slot_time'], '%Y-%m-%d %H:%M:%S')
+            slot_time_str = slot['slot_time']
+            try:
+                # Handle both time formats
+                if ':' in slot_time_str and slot_time_str.count(':') == 2:
+                    slot_time = datetime.strptime(slot_time_str, '%Y-%m-%d %H:%M:%S')
+                elif ':' in slot_time_str and slot_time_str.count(':') == 1:
+                    slot_time = datetime.strptime(slot_time_str, '%Y-%m-%d %H:%M')
+                else:
+                    error_msg = f'Invalid slot time format: {slot_time_str}'
+                    print(f"❌ {error_msg}")
+                    return jsonify({'success': False, 'error': error_msg}), 400
+            except ValueError as e:
+                error_msg = f'Invalid slot time format: {slot_time_str}'
+                print(f"❌ {error_msg}: {e}")
+                return jsonify({'success': False, 'error': error_msg}), 400
+
             if slot_time <= datetime.now():
                 error_msg = 'Cannot book past time slots'
                 print(f"❌ Past slot: {error_msg}")
@@ -2868,6 +2950,14 @@ def api_book_appointment():
                 print(f"❌ Slot already booked: {error_msg}")
                 return jsonify({'success': False, 'error': error_msg}), 400
 
+            # Verify member belongs to the family
+            c.execute('SELECT id FROM members WHERE id = ? AND family_id = ?', (member_id, uid))
+            member = c.fetchone()
+            if not member:
+                error_msg = 'Family member not found or does not belong to your family'
+                print(f"❌ Member validation failed: {error_msg}")
+                return jsonify({'success': False, 'error': error_msg}), 400
+
             # Insert or update appointment
             if appointment_id:
                 print(f"🔄 Rescheduling appointment {appointment_id} to slot {slot_id}")
@@ -2877,16 +2967,43 @@ def api_book_appointment():
                     print(f"❌ Reschedule failed: {error_msg}")
                     return jsonify({'success': False, 'error': error_msg}), 400
                 action = "rescheduled"
+                new_appointment_id = appointment_id
             else:
                 print(f"🆕 Creating new appointment for member {member_id} with slot {slot_id}")
                 c.execute('INSERT INTO appointments (member_id, slot_id, status) VALUES (?, ?, "Scheduled")', (member_id, slot_id))
+                new_appointment_id = c.lastrowid
                 action = "booked"
 
+            # MARK THE SLOT AS BOOKED
+            print(f"🔒 Marking slot {slot_id} as booked")
+            c.execute('UPDATE slots SET booked = 1 WHERE id = ?', (slot_id,))
+            if c.rowcount == 0:
+                print(f"⚠️ Could not mark slot {slot_id} as booked")
+
+            # Generate bill for the appointment
+            try:
+                # Get doctor's consultation fee
+                c.execute('SELECT consultation_fee FROM doctors WHERE id = ?', (doctor_id,))
+                doctor = c.fetchone()
+                consultation_fee = doctor['consultation_fee'] if doctor and doctor['consultation_fee'] else 500  # default fee
+                
+                # Create bill
+                bill_description = f"Consultation fee - Dr. {data.get('doctor_name', 'Unknown')}"
+                c.execute('INSERT INTO bills (appointment_id, amount, status, description, bill_date) VALUES (?, ?, "Pending", ?, DATE("now"))',
+                         (new_appointment_id, consultation_fee, bill_description))
+                print(f"💰 Bill created for appointment: ₹{consultation_fee}")
+            except Exception as bill_error:
+                print(f"⚠️ Could not create bill: {bill_error}")
+
             conn.commit()
-            print(f"✅ Appointment successfully {action}")
+            print(f"✅ Appointment successfully {action}, ID: {new_appointment_id}")
 
             conn.close()
-            return jsonify({'success': True, 'message': f'Appointment {action} successfully'})
+            return jsonify({
+                'success': True, 
+                'message': f'Appointment {action} successfully',
+                'appointment_id': new_appointment_id
+            })
 
         except Exception as e:
             print(f"❌ ERROR in book appointment POST API: {str(e)}")
@@ -3280,7 +3397,7 @@ def api_doctor_medical_records():
         c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
         doctor = dict(c.fetchone() or {})
         
-        # Get medical records of patients who visited this doctor
+        # Get medical records of patients who visited this dotcor
         c.execute('''SELECT mr.*, m.first_name, m.last_name 
                      FROM medical_records mr
                      JOIN members m ON mr.member_id = m.id
@@ -3370,11 +3487,11 @@ def api_doctor_patient_full_details(patient_id):
                      ORDER BY record_date DESC LIMIT 10''', (patient_id,))
         medical_history = [dict(row) for row in c.fetchall()]
 
-        # Get previous appointments with this doctor
+        # Get previous appointments with this doctor - EXCLUDE CANCELLED ONES
         c.execute('''SELECT a.id, s.slot_time, a.status
                      FROM appointments a
                      JOIN slots s ON a.slot_id = s.id
-                     WHERE a.member_id = ? AND s.doctor_id = ?
+                     WHERE a.member_id = ? AND s.doctor_id = ? AND a.status != 'Cancelled'
                      ORDER BY s.slot_time DESC LIMIT 5''', (patient_id, doctor_id))
         previous_appointments = [dict(row) for row in c.fetchall()]
 
@@ -3387,13 +3504,14 @@ def api_doctor_patient_full_details(patient_id):
                      ORDER BY p.prescription_date DESC LIMIT 10''', (patient_id, doctor_id))
         prescriptions = [dict(row) for row in c.fetchall()]
 
-        # Get current appointment if any
+        # Get current appointment if any - EXCLUDE CANCELLED ONES
         c.execute('''SELECT a.id as appointment_id, s.slot_time, d.name as doctor_name, 
                             d.specialty, a.status
                      FROM appointments a
                      JOIN slots s ON a.slot_id = s.id
                      JOIN doctors d ON s.doctor_id = d.id
                      WHERE a.member_id = ? AND s.doctor_id = ? 
+                     AND a.status != 'Cancelled'
                      AND date(s.slot_time) = date('now')
                      ORDER BY s.slot_time DESC LIMIT 1''', (patient_id, doctor_id))
         current_appointment = dict(c.fetchone() or {})
@@ -3413,7 +3531,7 @@ def api_doctor_patient_full_details(patient_id):
     except Exception as e:
         logger.error(f"Error in doctor patient full details API: {e}")
         return jsonify({'error': 'Failed to load patient details'}), 500
-
+    
 # -------------------------
 # Doctor - Add Prescriptions (3 Variants)
 # -------------------------
@@ -6085,36 +6203,6 @@ def dashboard():
 #     except Exception as e:
 #         logger.error(f"Error in patient dashboard: {e}")
 #         return render_template('patient_dashboard.html', error=f"Failed to load dashboard: {str(e)}")
-def generate_slots_for_doctor(doctor_id, days=30):
-    from datetime import datetime, timedelta
-
-    slots = []
-    start_date = datetime.now().date()
-
-    for i in range(days):
-        current_date = start_date + timedelta(days=i)
-        day_of_week = current_date.weekday()  # 0=Mon, 6=Sun
-
-        if day_of_week < 5:  # Weekdays
-            hours = list(range(10, 13)) + list(range(14, 18))
-        else:  # Weekends
-            hours = list(range(10, 13))
-
-        for hour in hours:
-            for minute in [0, 30]:
-                slot_time = datetime.combine(current_date, datetime.min.time()).replace(
-                    hour=hour, minute=minute, second=0
-                )
-                slots.append(Slot(
-                    doctor_id=doctor_id,
-                    slot_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    booked=0
-                ))
-
-    db.session.add_all(slots)
-    db.session.commit()
-    print(f"✅ Inserted {len(slots)} slots for doctor {doctor_id}")
-
 
 
 # @app.route('/doctor_dashboard')
@@ -6815,319 +6903,319 @@ def front_office_cancel_appointment(appointment_id):
 
 
 
-@app.route('/front_office/view_patient_from_appointment/<int:appointment_id>')
-def front_office_view_patient_from_appointment(appointment_id):
-    if 'family_id' not in session or session.get('user_type') != 'front_office':
-        return redirect('/')
+# @app.route('/front_office/view_patient_from_appointment/<int:appointment_id>')
+# def front_office_view_patient_from_appointment(appointment_id):
+#     if 'family_id' not in session or session.get('user_type') != 'front_office':
+#         return redirect('/')
     
-    try:
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get appointment details with patient information
-        c.execute('''SELECT 
-            a.id as appointment_id,
-            a.status, 
-            s.slot_time, 
-            d.name as doctor_name, 
-            d.specialty, 
-            m.id as patient_id,
-            m.first_name, 
-            m.middle_name,
-            m.last_name, 
-            m.age, 
-            m.gender, 
-            m.phone, 
-            m.email,
-            m.aadhar,
-            m.address,
-            m.prev_problem,
-            m.curr_problem,
-            m.created_date as registration_date
-            FROM appointments a
-            JOIN slots s ON a.slot_id = s.id
-            JOIN doctors d ON s.doctor_id = d.id
-            JOIN members m ON a.member_id = m.id
-            WHERE a.id = ?''', (appointment_id,))
+#         # Get appointment details with patient information
+#         c.execute('''SELECT 
+#             a.id as appointment_id,
+#             a.status, 
+#             s.slot_time, 
+#             d.name as doctor_name, 
+#             d.specialty, 
+#             m.id as patient_id,
+#             m.first_name, 
+#             m.middle_name,
+#             m.last_name, 
+#             m.age, 
+#             m.gender, 
+#             m.phone, 
+#             m.email,
+#             m.aadhar,
+#             m.address,
+#             m.prev_problem,
+#             m.curr_problem,
+#             m.created_date as registration_date
+#             FROM appointments a
+#             JOIN slots s ON a.slot_id = s.id
+#             JOIN doctors d ON s.doctor_id = d.id
+#             JOIN members m ON a.member_id = m.id
+#             WHERE a.id = ?''', (appointment_id,))
         
-        appointment = c.fetchone()
+#         appointment = c.fetchone()
         
-        if not appointment:
-            conn.close()
-            return redirect('/front_office/appointments?error=Appointment not found')
+#         if not appointment:
+#             conn.close()
+#             return redirect('/front_office/appointments?error=Appointment not found')
         
-        # Get patient's medical history
-        c.execute('''SELECT record_type, record_date, description, file_path
-                    FROM medical_records 
-                    WHERE member_id = ? 
-                    ORDER BY record_date DESC LIMIT 10''', 
-                 (appointment['patient_id'],))
-        medical_history = c.fetchall()
+#         # Get patient's medical history
+#         c.execute('''SELECT record_type, record_date, description, file_path
+#                     FROM medical_records 
+#                     WHERE member_id = ? 
+#                     ORDER BY record_date DESC LIMIT 10''', 
+#                  (appointment['patient_id'],))
+#         medical_history = c.fetchall()
         
-        # Get patient's previous appointments
-        c.execute('''SELECT a.id, d.name as doctor_name, s.slot_time, a.status
-                    FROM appointments a
-                    JOIN slots s ON a.slot_id = s.id
-                    JOIN doctors d ON s.doctor_id = d.id
-                    WHERE a.member_id = ?
-                    ORDER BY s.slot_time DESC LIMIT 5''',
-                 (appointment['patient_id'],))
-        previous_appointments = c.fetchall()
+#         # Get patient's previous appointments
+#         c.execute('''SELECT a.id, d.name as doctor_name, s.slot_time, a.status
+#                     FROM appointments a
+#                     JOIN slots s ON a.slot_id = s.id
+#                     JOIN doctors d ON s.doctor_id = d.id
+#                     WHERE a.member_id = ?
+#                     ORDER BY s.slot_time DESC LIMIT 5''',
+#                  (appointment['patient_id'],))
+#         previous_appointments = c.fetchall()
         
-        # Get patient's prescriptions
-        try:
-            c.execute('''SELECT prescription_date, medication, dosage, frequency, duration, 
-                        instructions, notes, d.name as doctor_name
-                        FROM prescriptions p
-                        JOIN doctors d ON p.doctor_id = d.id
-                        WHERE p.member_id = ?
-                        ORDER BY p.prescription_date DESC LIMIT 5''',
-                     (appointment['patient_id'],))
-            prescriptions = c.fetchall()
-        except Exception as e:
-            logger.error(f"Error fetching prescriptions: {e}")
-            prescriptions = []
+#         # Get patient's prescriptions
+#         try:
+#             c.execute('''SELECT prescription_date, medication, dosage, frequency, duration, 
+#                         instructions, notes, d.name as doctor_name
+#                         FROM prescriptions p
+#                         JOIN doctors d ON p.doctor_id = d.id
+#                         WHERE p.member_id = ?
+#                         ORDER BY p.prescription_date DESC LIMIT 5''',
+#                      (appointment['patient_id'],))
+#             prescriptions = c.fetchall()
+#         except Exception as e:
+#             logger.error(f"Error fetching prescriptions: {e}")
+#             prescriptions = []
         
-        # Get front office details for the navbar
-        c.execute('SELECT * FROM front_office WHERE family_id = ?', (session['family_id'],))
-        front_office = c.fetchone()
+#         # Get front office details for the navbar
+#         c.execute('SELECT * FROM front_office WHERE family_id = ?', (session['family_id'],))
+#         front_office = c.fetchone()
         
-        conn.close()
+#         conn.close()
         
-        return render_template('front_office_view_patient.html', 
-                              appointment=dict(appointment),
-                              medical_history=medical_history,
-                              previous_appointments=previous_appointments,
-                              prescriptions=prescriptions,
-                              front_office=front_office)
+#         return render_template('front_office_view_patient.html', 
+#                               appointment=dict(appointment),
+#                               medical_history=medical_history,
+#                               previous_appointments=previous_appointments,
+#                               prescriptions=prescriptions,
+#                               front_office=front_office)
         
-    except Exception as e:
-        logger.error(f"Error in front_office_view_patient_from_appointment route: {e}")
-        return redirect('/front_office/appointments?error=Failed to load patient details')
+#     except Exception as e:
+#         logger.error(f"Error in front_office_view_patient_from_appointment route: {e}")
+#         return redirect('/front_office/appointments?error=Failed to load patient details')
 
 
 
 
-@app.route('/doctor/patients')
-def doctor_patients():
-    if 'family_id' not in session or session.get('user_type') != 'doctor':
-        return redirect('/')
+# @app.route('/doctor/patients')
+# def doctor_patients():
+#     if 'family_id' not in session or session.get('user_type') != 'doctor':
+#         return redirect('/')
     
-    try:
-        uid = session['family_id']
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         uid = session['family_id']
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get doctor details
-        c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
-        doctor = c.fetchone()
+#         # Get doctor details
+#         c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
+#         doctor = c.fetchone()
         
-        # Get all patients who have appointments with this doctor
-        c.execute('''SELECT DISTINCT m.*, MAX(s.slot_time) as last_visit
-                    FROM members m
-                    JOIN appointments a ON m.id = a.member_id
-                    JOIN slots s ON a.slot_id = s.id
-                    WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
-                    GROUP BY m.id
-                    ORDER BY last_visit DESC''', (uid,))
+#         # Get all patients who have appointments with this doctor
+#         c.execute('''SELECT DISTINCT m.*, MAX(s.slot_time) as last_visit
+#                     FROM members m
+#                     JOIN appointments a ON m.id = a.member_id
+#                     JOIN slots s ON a.slot_id = s.id
+#                     WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
+#                     GROUP BY m.id
+#                     ORDER BY last_visit DESC''', (uid,))
         
-        patients = c.fetchall()
-        conn.close()
+#         patients = c.fetchall()
+#         conn.close()
         
-        return render_template('doctor_patients.html', doctor=doctor, patients=patients)
-    except Exception as e:
-        logger.error(f"Error in doctor patients route: {e}")
-        return render_template('doctor_patients.html', error=f"Failed to load patients: {str(e)}")
+#         return render_template('doctor_patients.html', doctor=doctor, patients=patients)
+#     except Exception as e:
+#         logger.error(f"Error in doctor patients route: {e}")
+#         return render_template('doctor_patients.html', error=f"Failed to load patients: {str(e)}")
 
-@app.route('/doctor/schedule')
-def doctor_schedule():
-    if 'family_id' not in session or session.get('user_type') != 'doctor':
-        return redirect('/')
+# @app.route('/doctor/schedule')
+# def doctor_schedule():
+#     if 'family_id' not in session or session.get('user_type') != 'doctor':
+#         return redirect('/')
     
-    try:
-        uid = session['family_id']
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         uid = session['family_id']
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get doctor details
-        c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
-        doctor = c.fetchone()
+#         # Get doctor details
+#         c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
+#         doctor = c.fetchone()
         
-        # Get doctor's schedule (slots)
-        c.execute('''SELECT s.*, 
-                    CASE WHEN a.id IS NULL THEN 'Available' ELSE 'Booked' END as status,
-                    m.first_name, m.last_name
-                    FROM slots s
-                    LEFT JOIN appointments a ON s.id = a.slot_id
-                    LEFT JOIN members m ON a.member_id = m.id
-                    WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
-                    ORDER BY s.slot_time''', (uid,))
+#         # Get doctor's schedule (slots)
+#         c.execute('''SELECT s.*, 
+#                     CASE WHEN a.id IS NULL THEN 'Available' ELSE 'Booked' END as status,
+#                     m.first_name, m.last_name
+#                     FROM slots s
+#                     LEFT JOIN appointments a ON s.id = a.slot_id
+#                     LEFT JOIN members m ON a.member_id = m.id
+#                     WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
+#                     ORDER BY s.slot_time''', (uid,))
         
-        schedule = c.fetchall()
-        conn.close()
+#         schedule = c.fetchall()
+#         conn.close()
         
-        return render_template('doctor_schedule.html', doctor=doctor, schedule=schedule)
-    except Exception as e:
-        logger.error(f"Error in doctor schedule route: {e}")
-        return render_template('doctor_schedule.html', error=f"Failed to load schedule: {str(e)}")
+#         return render_template('doctor_schedule.html', doctor=doctor, schedule=schedule)
+#     except Exception as e:
+#         logger.error(f"Error in doctor schedule route: {e}")
+#         return render_template('doctor_schedule.html', error=f"Failed to load schedule: {str(e)}")
 
-@app.route('/doctor/appointments')
-def doctor_appointments():
-    if 'family_id' not in session or session.get('user_type') != 'doctor':
-        return redirect('/')
+# @app.route('/doctor/appointments')
+# def doctor_appointments():
+#     if 'family_id' not in session or session.get('user_type') != 'doctor':
+#         return redirect('/')
     
-    try:
-        uid = session['family_id']
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         uid = session['family_id']
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get doctor details
-        c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
-        doctor = c.fetchone()
+#         # Get doctor details
+#         c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
+#         doctor = c.fetchone()
         
-        # Get doctor's appointments
-        c.execute('''SELECT a.id, m.first_name, m.last_name, m.phone, m.email, 
-                    s.slot_time, s.booked as status
-                    FROM appointments a 
-                    JOIN slots s ON a.slot_id = s.id 
-                    JOIN members m ON a.member_id = m.id 
-                    WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
-                    ORDER BY s.slot_time DESC''', (uid,))
+#         # Get doctor's appointments
+#         c.execute('''SELECT a.id, m.first_name, m.last_name, m.phone, m.email, 
+#                     s.slot_time, s.booked as status
+#                     FROM appointments a 
+#                     JOIN slots s ON a.slot_id = s.id 
+#                     JOIN members m ON a.member_id = m.id 
+#                     WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
+#                     ORDER BY s.slot_time DESC''', (uid,))
         
-        appointments = c.fetchall()
-        conn.close()
+#         appointments = c.fetchall()
+#         conn.close()
         
-        return render_template('doctor_appointments.html', doctor=doctor, appointments=appointments)
-    except Exception as e:
-        logger.error(f"Error in doctor appointments route: {e}")
-        return render_template('doctor_appointments.html', error=f"Failed to load appointments: {str(e)}")
-@app.route('/doctor/prescriptions', methods=['GET', 'POST'])
-def doctor_prescriptions():
-    if 'family_id' not in session or session.get('user_type') != 'doctor':
-        return redirect('/')
+#         return render_template('doctor_appointments.html', doctor=doctor, appointments=appointments)
+#     except Exception as e:
+#         logger.error(f"Error in doctor appointments route: {e}")
+#         return render_template('doctor_appointments.html', error=f"Failed to load appointments: {str(e)}")
+# @app.route('/doctor/prescriptions', methods=['GET', 'POST'])
+# def doctor_prescriptions():
+#     if 'family_id' not in session or session.get('user_type') != 'doctor':
+#         return redirect('/')
     
-    try:
-        uid = session['family_id']
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         uid = session['family_id']
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get doctor details
-        c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
-        doctor = c.fetchone()
+#         # Get doctor details
+#         c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
+#         doctor = c.fetchone()
         
-        if request.method == 'POST':
-            # Add new prescription
-            member_id = request.form['member_id']
-            medication = request.form['medication']
-            dosage = request.form['dosage']
-            frequency = request.form.get('frequency', '')
-            duration = request.form.get('duration', '')
-            instructions = request.form.get('instructions', '')
-            notes = request.form.get('notes', '')
+#         if request.method == 'POST':
+#             # Add new prescription
+#             member_id = request.form['member_id']
+#             medication = request.form['medication']
+#             dosage = request.form['dosage']
+#             frequency = request.form.get('frequency', '')
+#             duration = request.form.get('duration', '')
+#             instructions = request.form.get('instructions', '')
+#             notes = request.form.get('notes', '')
             
-            from datetime import datetime
-            prescription_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
+#             from datetime import datetime
+#             prescription_date = datetime.now().strftime('%Y-%m-%d %H:%M:%S')
             
-            c.execute('''INSERT INTO prescriptions (member_id, doctor_id, prescription_date, medication, dosage, 
-                        frequency, duration, instructions, notes)
-                        VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                      (member_id, doctor['id'], prescription_date, medication, dosage, 
-                       frequency, duration, instructions, notes))
-            conn.commit()
+#             c.execute('''INSERT INTO prescriptions (member_id, doctor_id, prescription_date, medication, dosage, 
+#                         frequency, duration, instructions, notes)
+#                         VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+#                       (member_id, doctor['id'], prescription_date, medication, dosage, 
+#                        frequency, duration, instructions, notes))
+#             conn.commit()
             
-            return redirect('/doctor/prescriptions?success=Prescription added successfully')
+#             return redirect('/doctor/prescriptions?success=Prescription added successfully')
         
-        # Get all prescriptions by this doctor with frequency and duration
-        try:
-            c.execute('''SELECT p.*, m.first_name, m.last_name, d.name as doctor_name
-                        FROM prescriptions p
-                        JOIN members m ON p.member_id = m.id
-                        JOIN doctors d ON p.doctor_id = d.id
-                        WHERE p.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
-                        ORDER BY p.prescription_date DESC''', (uid,))
-            prescriptions = c.fetchall()
-        except Exception as e:
-            logger.error(f"Error fetching prescriptions: {e}")
-            prescriptions = []
+#         # Get all prescriptions by this doctor with frequency and duration
+#         try:
+#             c.execute('''SELECT p.*, m.first_name, m.last_name, d.name as doctor_name
+#                         FROM prescriptions p
+#                         JOIN members m ON p.member_id = m.id
+#                         JOIN doctors d ON p.doctor_id = d.id
+#                         WHERE p.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
+#                         ORDER BY p.prescription_date DESC''', (uid,))
+#             prescriptions = c.fetchall()
+#         except Exception as e:
+#             logger.error(f"Error fetching prescriptions: {e}")
+#             prescriptions = []
         
-        # Get patients for dropdown
-        c.execute('''SELECT DISTINCT m.id, m.first_name, m.last_name
-                    FROM members m
-                    JOIN appointments a ON m.id = a.member_id
-                    JOIN slots s ON a.slot_id = s.id
-                    WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
-                    ORDER BY m.first_name''', (uid,))
+#         # Get patients for dropdown
+#         c.execute('''SELECT DISTINCT m.id, m.first_name, m.last_name
+#                     FROM members m
+#                     JOIN appointments a ON m.id = a.member_id
+#                     JOIN slots s ON a.slot_id = s.id
+#                     WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
+#                     ORDER BY m.first_name''', (uid,))
         
-        patients = c.fetchall()
+#         patients = c.fetchall()
         
-        # Get patient_id from query parameter if provided
-        selected_patient_id = request.args.get('patient_id')
+#         # Get patient_id from query parameter if provided
+#         selected_patient_id = request.args.get('patient_id')
         
-        conn.close()
+#         conn.close()
         
-        return render_template('doctor_prescriptions.html', 
-                              doctor=doctor, 
-                              prescriptions=prescriptions, 
-                              patients=patients,
-                              selected_patient_id=selected_patient_id)
-    except Exception as e:
-        logger.error(f"Error in doctor prescriptions route: {e}")
-        return render_template('doctor_prescriptions.html', error=f"Failed to load prescriptions: {str(e)}")
-@app.route('/patient_medical_records', methods=['GET', 'POST'])
-def patient_medical_records():
-    if 'family_id' not in session or session.get('user_type') != 'patient':
-        return redirect('/')
+#         return render_template('doctor_prescriptions.html', 
+#                               doctor=doctor, 
+#                               prescriptions=prescriptions, 
+#                               patients=patients,
+#                               selected_patient_id=selected_patient_id)
+#     except Exception as e:
+#         logger.error(f"Error in doctor prescriptions route: {e}")
+#         return render_template('doctor_prescriptions.html', error=f"Failed to load prescriptions: {str(e)}")
+# @app.route('/patient_medical_records', methods=['GET', 'POST'])
+# def patient_medical_records():
+#     if 'family_id' not in session or session.get('user_type') != 'patient':
+#         return redirect('/')
 
-    try:
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         conn = get_db()
+#         c = conn.cursor()
 
-        if request.method == 'POST':
-            member_id = request.form['member_id']
-            record_type = request.form['record_type']
-            record_date = request.form['record_date']
-            description = request.form['description']
-            file = request.files['file']
+#         if request.method == 'POST':
+#             member_id = request.form['member_id']
+#             record_type = request.form['record_type']
+#             record_date = request.form['record_date']
+#             description = request.form['description']
+#             file = request.files['file']
 
-            # Ensure upload directory exists
-            upload_dir = app.config['UPLOAD_FOLDER']
-            if not os.path.exists(upload_dir):
-                os.makedirs(upload_dir)
+#             # Ensure upload directory exists
+#             upload_dir = app.config['UPLOAD_FOLDER']
+#             if not os.path.exists(upload_dir):
+#                 os.makedirs(upload_dir)
 
-            if file and file.filename != '':
-                # Generate a unique filename to prevent collisions
-                filename = secure_filename(file.filename)
-                unique_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}"
-                file_path = os.path.join(upload_dir, unique_filename)
-                file.save(file_path)
+#             if file and file.filename != '':
+#                 # Generate a unique filename to prevent collisions
+#                 filename = secure_filename(file.filename)
+#                 unique_filename = f"{datetime.now().strftime('%Y%m%d%H%M%S')}_{filename}"
+#                 file_path = os.path.join(upload_dir, unique_filename)
+#                 file.save(file_path)
                 
-                # Store relative path for web access
-                web_file_path = f"uploads/{unique_filename}"
-            else:
-                web_file_path = None
+#                 # Store relative path for web access
+#                 web_file_path = f"uploads/{unique_filename}"
+#             else:
+#                 web_file_path = None
 
-            c.execute('INSERT INTO medical_records (member_id, record_type, record_date, description, file_path, uploaded_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
-                     (member_id, record_type, record_date, description, web_file_path))
-            conn.commit()
-            flash('Medical record uploaded successfully!', 'success')
-            return redirect('/patient_dashboard#medical')
+#             c.execute('INSERT INTO medical_records (member_id, record_type, record_date, description, file_path, uploaded_date) VALUES (?, ?, ?, ?, ?, CURRENT_TIMESTAMP)',
+#                      (member_id, record_type, record_date, description, web_file_path))
+#             conn.commit()
+#             flash('Medical record uploaded successfully!', 'success')
+#             return redirect('/patient_dashboard#medical')
 
-        # GET request - show form with family members
-        family_id = session['family_id']
-        c.execute('''
-            SELECT id, first_name, last_name 
-            FROM family_members 
-            WHERE family_id = ?
-        ''', (family_id,))
-        family_members = c.fetchall()
+#         # GET request - show form with family members
+#         family_id = session['family_id']
+#         c.execute('''
+#             SELECT id, first_name, last_name 
+#             FROM family_members 
+#             WHERE family_id = ?
+#         ''', (family_id,))
+#         family_members = c.fetchall()
         
-        conn.close()
-        return render_template('patient_medical_records.html', family_members=family_members)
+#         conn.close()
+#         return render_template('patient_medical_records.html', family_members=family_members)
 
-    except Exception as e:
-        logger.error(f"Error in patient medical records route: {e}")
-        flash(f"Failed to process request: {str(e)}", 'error')
-        return redirect('/patient_dashboard#medical')
+#     except Exception as e:
+#         logger.error(f"Error in patient medical records route: {e}")
+#         flash(f"Failed to process request: {str(e)}", 'error')
+#         return redirect('/patient_dashboard#medical')
 
 # @app.route('/front_office/checkins', methods=['GET', 'POST'])
 # def front_office_checkins():

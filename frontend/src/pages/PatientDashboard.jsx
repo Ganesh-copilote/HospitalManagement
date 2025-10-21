@@ -806,6 +806,7 @@ const handleUploadSubmit = async (e) => {
             <thead>
               <tr className="bg-gray-50 border-b border-gray-200">
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Bill ID</th>
+                <th className="p-4 text-left text-sm font-medium text-gray-700">Patient</th>
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Amount</th>
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Status</th>
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Date</th>
@@ -817,6 +818,7 @@ const handleUploadSubmit = async (e) => {
               {data.bills.map((bill, index) => (
                 <tr key={bill.id} className={`border-b border-gray-100 last:border-0 ${index % 2 === 0 ? 'bg-white' : 'bg-gray-50'}`}>
                   <td className="p-4 text-sm font-medium">#{bill.id}</td>
+                  <td className="p-4 text-sm font-medium">{bill.first_name} {bill.last_name}</td>
                   <td className="p-4 text-sm font-bold">₹{parseFloat(bill.amount || 0).toLocaleString('en-IN')}</td>
                   <td className="p-4">
                     {getStatusBadge(bill.status)}

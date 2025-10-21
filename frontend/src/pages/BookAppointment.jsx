@@ -64,6 +64,8 @@ const BookAppointment = () => {
     );
   };
 
+
+  
   // ---------- Scroll-To-Top ----------
   useEffect(() => {
     debugger
@@ -149,6 +151,11 @@ const BookAppointment = () => {
     fetchSlots();
   }, [formData.doctor_id, formData.date]);
 
+
+
+
+
+  
   // ---------- Handlers ----------
   const handleChange = (e) => {
     const { name, value } = e.target;
