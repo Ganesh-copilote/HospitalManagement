@@ -25,7 +25,7 @@ conn = sqlite3.connect("hospital1.db")
 cursor = conn.cursor()
 
 # choose table name
-table_name = "medical_records"  # Change this to the table you want to query
+table_name = "doctors"  # Change this to the table you want to query
 # cursor.execute("PRAGMA table_info(bills);")
 # # 
 # # fetch all rows

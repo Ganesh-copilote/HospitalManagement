@@ -970,18 +970,7 @@ const FrontOfficeDashboard = () => {
     <>
       <Navbar isDashboard={true} userName="Alexandro" userType="front_office" />
       <div className="min-h-screen bg-gray-50 pt-20">
-        {/* Animated Header Section */}
-        <motion.div 
-          initial={{ opacity: 0, y: -20 }}
-          animate={{ opacity: 1, y: 0 }}
-          transition={{ duration: 0.5 }}
-          className="bg-gradient-to-r from-blue-600 to-purple-600 shadow-lg"
-        >
-          <div className="container mx-auto px-6 py-6">
-            <h1 className="text-3xl font-bold text-white">Welcome back, Alexandro</h1>
-            <p className="text-blue-100 mt-2 text-lg">Here's your dashboard overview for today</p>
-          </div>
-        </motion.div>
+        
 
         <div className="container mx-auto px-6 py-6">
           {error && (

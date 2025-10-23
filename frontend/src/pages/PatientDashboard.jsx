@@ -16,7 +16,7 @@ import Modal from '../components/Modal';
 const PatientDashboard = () => {
   debugger
   const [data, setData] = useState({
-    profile: {}, family_members: [], appointments: [], medical_records: [], bills: [], family_id: ''
+    profile: {}, family_members: [], appointments: [], medical_records: [],prescriptions: [], bills: [], family_id: ''
   });
   const [error, setError] = useState('');
   const [showModal, setShowModal] = useState(false);
@@ -302,6 +302,7 @@ const handleUploadSubmit = async (e) => {
       change: `${Math.min(data.medical_records.length * 8, 100)}%`,
       trend: 'up'
     },
+    
     { 
       title: 'Pending Bills', 
       value: data.bills.filter(bill => bill.status === 'Pending').length, 
@@ -334,6 +335,222 @@ const handleUploadSubmit = async (e) => {
       </span>
     );
   };
+
+
+const handlePrintPrescription = (prescription) => {
+  // Create a new window for printing
+  const printWindow = window.open('', '_blank');
+  
+  // Create the printable content
+  const printableContent = `
+    <!DOCTYPE html>
+    <html>
+    <head>
+      <title>Prescription - ${prescription.first_name} ${prescription.last_name}</title>
+      <style>
+        body {
+          font-family: 'Arial', sans-serif;
+          line-height: 1.6;
+          color: #333;
+          max-width: 800px;
+          margin: 0 auto;
+          padding: 20px;
+        }
+        .header {
+          text-align: center;
+          border-bottom: 2px solid #2563eb;
+          padding-bottom: 20px;
+          margin-bottom: 30px;
+        }
+        .clinic-name {
+          font-size: 24px;
+          font-weight: bold;
+          color: #2563eb;
+          margin-bottom: 5px;
+        }
+        .clinic-address {
+          font-size: 14px;
+          color: #666;
+        }
+        .prescription-title {
+          text-align: center;
+          font-size: 20px;
+          font-weight: bold;
+          margin: 20px 0;
+          color: #2563eb;
+        }
+        .section {
+          margin-bottom: 25px;
+        }
+        .section-title {
+          font-weight: bold;
+          font-size: 16px;
+          color: #2563eb;
+          margin-bottom: 10px;
+          border-bottom: 1px solid #e5e7eb;
+          padding-bottom: 5px;
+        }
+        .patient-info, .doctor-info {
+          display: flex;
+          justify-content: space-between;
+          margin-bottom: 15px;
+        }
+        .info-item {
+          flex: 1;
+        }
+        .info-label {
+          font-weight: bold;
+          color: #666;
+          font-size: 14px;
+        }
+        .info-value {
+          font-size: 15px;
+        }
+        .medication-table {
+          width: 100%;
+          border-collapse: collapse;
+          margin: 15px 0;
+        }
+        .medication-table th {
+          background-color: #2563eb;
+          color: white;
+          padding: 10px;
+          text-align: left;
+          font-size: 14px;
+        }
+        .medication-table td {
+          padding: 10px;
+          border: 1px solid #e5e7eb;
+          font-size: 14px;
+        }
+        .instructions, .notes {
+          background-color: #f8fafc;
+          padding: 15px;
+          border-radius: 5px;
+          border-left: 4px solid #2563eb;
+          margin: 15px 0;
+        }
+        .footer {
+          margin-top: 40px;
+          text-align: center;
+          border-top: 1px solid #e5e7eb;
+          padding-top: 20px;
+          color: #666;
+          font-size: 14px;
+        }
+        .signature {
+          margin-top: 50px;
+          text-align: right;
+        }
+        .doctor-signature {
+          border-top: 1px solid #333;
+          display: inline-block;
+          padding-top: 5px;
+          margin-top: 40px;
+        }
+        @media print {
+          body { margin: 0; padding: 20px; }
+          .no-print { display: none; }
+        }
+      </style>
+    </head>
+    <body>
+      <div class="header">
+        <div class="clinic-name">MediCare Clinic</div>
+        <div class="clinic-address">123 Health Street, Medical City, MC 12345 | Phone: (555) 123-4567</div>
+      </div>
+      
+      <div class="prescription-title">MEDICAL PRESCRIPTION</div>
+      
+      <div class="patient-info">
+        <div class="info-item">
+          <div class="info-label">Patient Name:</div>
+          <div class="info-value">${prescription.first_name} ${prescription.last_name}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Date:</div>
+          <div class="info-value">${prescription.prescription_date ? new Date(prescription.prescription_date).toLocaleDateString('en-US', { year: 'numeric', month: 'long', day: 'numeric' }) : 'Not specified'}</div>
+        </div>
+      </div>
+      
+      <div class="doctor-info">
+        <div class="info-item">
+          <div class="info-label">Prescribing Doctor:</div>
+          <div class="info-value">Dr. ${prescription.doctor_name}</div>
+        </div>
+        <div class="info-item">
+          <div class="info-label">Specialty:</div>
+          <div class="info-value">${prescription.specialty || 'General Physician'}</div>
+        </div>
+      </div>
+      
+      <div class="section">
+        <div class="section-title">PRESCRIBED MEDICATION</div>
+        <table class="medication-table">
+          <thead>
+            <tr>
+              <th>Medication</th>
+              <th>Dosage</th>
+              <th>Frequency</th>
+              <th>Duration</th>
+            </tr>
+          </thead>
+          <tbody>
+            <tr>
+              <td>${prescription.medication}</td>
+              <td>${prescription.dosage}</td>
+              <td>${prescription.frequency || 'As directed'}</td>
+              <td>${prescription.duration || 'Until finished'}</td>
+            </tr>
+          </tbody>
+        </table>
+      </div>
+      
+      ${prescription.instructions ? `
+      <div class="section">
+        <div class="section-title">SPECIAL INSTRUCTIONS</div>
+        <div class="instructions">
+          ${prescription.instructions}
+        </div>
+      </div>
+      ` : ''}
+      
+      ${prescription.notes ? `
+      <div class="section">
+        <div class="section-title">ADDITIONAL NOTES</div>
+        <div class="notes">
+          ${prescription.notes}
+        </div>
+      </div>
+      ` : ''}
+      
+      <div class="signature">
+        <div class="doctor-signature">
+          <strong>Dr. ${prescription.doctor_name}</strong><br>
+          Medical License No: ${'ML' + Math.random().toString(36).substr(2, 6).toUpperCase()}
+        </div>
+      </div>
+      
+      <div class="footer">
+        <p>This is a computer-generated prescription. No signature is required.</p>
+        <p>For emergency, contact: (555) 123-EMER | Printed on: ${new Date().toLocaleDateString()}</p>
+      </div>
+      
+      <div class="no-print" style="margin-top: 20px; text-align: center;">
+        <button onclick="window.print()" style="padding: 10px 20px; background: #2563eb; color: white; border: none; border-radius: 5px; cursor: pointer;">Print Prescription</button>
+        <button onclick="window.close()" style="padding: 10px 20px; background: #666; color: white; border: none; border-radius: 5px; cursor: pointer; margin-left: 10px;">Close Window</button>
+      </div>
+    </body>
+    </html>
+  `;
+
+  // Write the content to the new window
+  printWindow.document.write(printableContent);
+  printWindow.document.close();
+
+  // Focus on the new window (optional)
+  printWindow.focus();
+};
 
   // Dashboard Section
   const renderDashboard = () => (
@@ -739,6 +956,147 @@ const handleUploadSubmit = async (e) => {
     </div>
   );
 
+// Prescriptions Section
+const renderPrescriptions = () => (
+  <div className="space-y-6">
+    <div className="bg-white rounded-2xl shadow-lg p-6">
+      <div className="flex justify-between items-center mb-6">
+        <h2 className="text-xl font-bold text-gray-800">Prescriptions</h2>
+        <div className="text-sm text-gray-600">
+          {data.prescriptions.length} prescription(s) found
+        </div>
+      </div>
+      
+      {data.prescriptions.length > 0 ? (
+        <div className="space-y-6">
+          {data.prescriptions.map((prescription, index) => (
+            <div key={prescription.id || index} className="border border-gray-200 rounded-xl p-6 hover:shadow-md transition-shadow duration-200">
+              {/* Header with Doctor Info and Date */}
+              <div className="flex justify-between items-start mb-4">
+                <div>
+                  <h3 className="font-semibold text-lg text-gray-800">
+                    Dr. {prescription.doctor_name}
+                  </h3>
+                  <p className="text-gray-600 text-sm">
+                    {prescription.specialty || 'General Physician'}
+                  </p>
+                </div>
+                <div className="text-right">
+                  <p className="text-sm text-gray-500">
+                    {prescription.prescription_date ? 
+                      new Date(prescription.prescription_date).toLocaleDateString('en-US', {
+                        year: 'numeric',
+                        month: 'long',
+                        day: 'numeric'
+                      }) : 
+                      'Date not available'
+                    }
+                  </p>
+                  <span className="inline-block mt-1 px-2 py-1 bg-green-100 text-green-800 text-xs rounded-full">
+                    Active
+                  </span>
+                </div>
+              </div>
+
+              {/* Medication Details */}
+              <div className="mb-4">
+                <h4 className="font-medium text-gray-700 mb-3 flex items-center">
+                  <span className="text-blue-500 mr-2">💊</span>
+                  Medication Details
+                </h4>
+                <div className="bg-blue-50 rounded-lg p-4">
+                  <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                    <div>
+                      <p className="text-sm text-gray-600">Medication</p>
+                      <p className="font-semibold text-gray-800">{prescription.medication}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Dosage</p>
+                      <p className="font-semibold text-gray-800">{prescription.dosage}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Frequency</p>
+                      <p className="font-semibold text-gray-800">{prescription.frequency || 'As directed'}</p>
+                    </div>
+                    <div>
+                      <p className="text-sm text-gray-600">Duration</p>
+                      <p className="font-semibold text-gray-800">{prescription.duration || 'Until finished'}</p>
+                    </div>
+                  </div>
+                </div>
+              </div>
+
+              {/* Instructions and Notes */}
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                {prescription.instructions && (
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-2 flex items-center">
+                      <span className="text-green-500 mr-2">📝</span>
+                      Instructions
+                    </h4>
+                    <p className="text-sm text-gray-700 bg-green-50 rounded-lg p-3">
+                      {prescription.instructions}
+                    </p>
+                  </div>
+                )}
+                
+                {prescription.notes && (
+                  <div>
+                    <h4 className="font-medium text-gray-700 mb-2 flex items-center">
+                      <span className="text-purple-500 mr-2">📋</span>
+                      Additional Notes
+                    </h4>
+                    <p className="text-sm text-gray-700 bg-purple-50 rounded-lg p-3">
+                      {prescription.notes}
+                    </p>
+                  </div>
+                )}
+              </div>
+
+              {/* Patient Info */}
+              <div className="mt-4 pt-4 border-t border-gray-200">
+                <p className="text-sm text-gray-600">
+                  Prescribed for: <span className="font-medium text-gray-800">
+                    {prescription.first_name} {prescription.last_name}
+                  </span>
+                </p>
+              </div>
+
+              {/* Print Button */}
+              <div className="mt-6 flex justify-end">
+                <button 
+                  onClick={() => handlePrintPrescription(prescription)}
+                  className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors flex items-center space-x-2"
+                >
+                  <svg className="w-4 h-4" fill="none" stroke="currentColor" viewBox="0 0 24 24">
+                    <path strokeLinecap="round" strokeLinejoin="round" strokeWidth={2} d="M17 17h2a2 2 0 002-2v-4a2 2 0 00-2-2H5a2 2 0 00-2 2v4a2 2 0 002 2h2m2 4h6a2 2 0 002-2v-4a2 2 0 00-2-2H9a2 2 0 00-2 2v4a2 2 0 002 2zm8-12V5a2 2 0 00-2-2H9a2 2 0 00-2 2v4h10z" />
+                  </svg>
+                  <span>Print Prescription</span>
+                </button>
+              </div>
+            </div>
+          ))}
+        </div>
+      ) : (
+        <div className="text-center py-12">
+          <div className="text-6xl mb-4">💊</div>
+          <h3 className="text-lg font-semibold text-gray-800 mb-2">No Prescriptions Yet</h3>
+          <p className="text-gray-600 mb-6">
+            Your prescriptions will appear here after your doctor visits.
+          </p>
+          <button 
+            onClick={() => navigate('/book_appointment')} 
+            className="bg-blue-600 text-white py-2 px-6 rounded-lg hover:bg-blue-700 transition-colors"
+          >
+            Book an Appointment
+          </button>
+        </div>
+      )}
+    </div>
+  </div>
+);
+
+
   // Family Members Section
   const renderFamilyMembers = () => (
     <div className="space-y-6">
@@ -969,6 +1327,7 @@ const handleUploadSubmit = async (e) => {
                 { id: 'profile', name: 'Profile', icon: '👤' },
                 { id: 'appointments', name: 'Appointments', icon: '📅' },
                 { id: 'medical', name: 'Medical Records', icon: '📋' },
+                { id: 'prescriptions', name: 'Prescriptions', icon: '💊' }, // Add this line
                 { id: 'family', name: 'Family', icon: '👨‍👩‍👧‍👦' },
                 { id: 'billing', name: 'Billing', icon: '💰' },
                 { id: 'reports', name: 'Reports', icon: '📈' },
@@ -1011,6 +1370,7 @@ const handleUploadSubmit = async (e) => {
                  activeSection === 'profile' ? 'Profile' :
                  activeSection === 'appointments' ? 'Appointments' :
                  activeSection === 'medical' ? 'Medical Records' :
+                 activeSection === 'prescriptions' ? 'Prescriptions' : 
                  activeSection === 'family' ? 'Family Members' :
                  activeSection === 'billing' ? 'Billing' :
                  activeSection === 'reports' ? 'Reports' : 'Settings'}
@@ -1031,6 +1391,7 @@ const handleUploadSubmit = async (e) => {
             {activeSection === 'profile' && renderProfile()}
             {activeSection === 'appointments' && renderAppointments()}
             {activeSection === 'medical' && renderMedicalRecords()}
+            {activeSection === 'prescriptions' && renderPrescriptions()} {/* Add this line */}
             {activeSection === 'family' && renderFamilyMembers()}
             {activeSection === 'billing' && renderBilling()}
             {activeSection === 'reports' && renderReports()}
