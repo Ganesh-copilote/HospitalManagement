@@ -1244,7 +1244,7 @@ const Medical = () => {
                                 >
                                   <Trash2 size={16} className={isDark ? 'text-white' : 'text-red-600'} />
                                 </motion.button>
-                                <motion.button
+                                {/* <motion.button
                                   whileHover={{ scale: 1.05 }}
                                   whileTap={{ scale: 0.95 }}
                                   className={`p-2 rounded ${
@@ -1252,7 +1252,7 @@ const Medical = () => {
                                   } transition-colors duration-200`}
                                 >
                                   <Download size={16} className={isDark ? 'text-white' : 'text-emerald-600'} />
-                                </motion.button>
+                                </motion.button> */}
                               </div>
                             </div>
                             <div className="space-y-2">

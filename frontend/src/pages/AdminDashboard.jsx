@@ -1,196 +1,244 @@
 import { useEffect, useState } from "react";
 import { useNavigate } from "react-router-dom";
-import { AdminDashboard as fetchAdminDashboard } from "../services/api";
+import { 
+  getAdminAppointments, 
+  getAdminPatientData,
+  getAdminDoctordata,
+  AdminDashboard,
+  logout 
+} from "../services/api";
 import { 
   Users, 
   Stethoscope, 
   CalendarDays, 
   FileText, 
   Menu,
-  Plus,
   TrendingUp,
   DollarSign,
-  Clock,
   CheckCircle2,
   Activity,
-  ArrowUp,
-  ArrowDown,
   UserPlus,
   Calendar,
-  AlertCircle,
-  Star
+  LogOut
 } from "lucide-react";
-import StatCard from "../components/admin/StatCard";
 import Sidebar from "../components/admin/sidebar";
 import QuickActions from "../components/admin/QuickActions";
 
 const Dashboard = () => {
   const [stats, setStats] = useState({});
-  const [allData, setAllData] = useState({});
   const [sidebarOpen, setSidebarOpen] = useState(true);
   const [currentPath, setCurrentPath] = useState("/");
   const [isDark, setIsDark] = useState(false);
   const [recentActivity, setRecentActivity] = useState([]);
-  const [upcomingAppointments, setUpcomingAppointments] = useState([]);
+  const [scheduleAppointments, setScheduleAppointments] = useState([]);
   const [recentPatients, setRecentPatients] = useState([]);
+  const [loading, setLoading] = useState(true);
   
   const navigate = useNavigate();
+useEffect(() => {
+  const loadData = async () => {
+    try {
+      setLoading(true);
+      console.log('🔄 Fetching dashboard data...');
 
-  useEffect(() => {
-    const loadData = async () => {
-      try {
-        const data = await fetchAdminDashboard();
-        console.log("📊 Full Dashboard Data:", data);
-        setAllData(data);
+      // Use AdminDashboard API call
+      const data = await AdminDashboard();
+      console.log("📊 Full Dashboard Data:", data);
 
-        // Extract data from different possible structures
-        const patients = data.members || data.family_members || [];
-        const doctors = data.doctors || data.Doctors || [];
-        const appointments = data.appointments || [];
-        const bills = data.bills || [];
+      // Extract data from different possible structures
+      const patientsData = data.members || data.family_members || data.patients || [];
+      const doctorsData = data.doctors || data.Doctors || [];
+      const appointments = data.appointments || [];
+      const slots = data.slots || []; // Add slots data
+      const bills = data.bills || [];
 
-        console.log("👥 Patients:", patients);
-        console.log("👨‍⚕️ Doctors:", doctors);
-        console.log("📅 Appointments:", appointments);
-        console.log("💰 Bills:", bills);
+      console.log("👥 Patients:", patientsData);
+      console.log("👨‍⚕️ Doctors:", doctorsData);
+      console.log("📅 Appointments:", appointments);
+      console.log("⏰ Slots:", slots);
+      console.log("💰 Bills:", bills);
 
-        // Upcoming appointments (next 7 days)
-        const nextWeek = new Date();
-        nextWeek.setDate(nextWeek.getDate() + 7);
-        
-        const upcomingApps = appointments.filter(apt => {
-          const aptDate = new Date(apt.date);
-          return aptDate > new Date() && 
-                 aptDate <= nextWeek &&
-                 (apt.status === 'scheduled' || apt.status === 'Scheduled' || !apt.status);
-        }).sort((a, b) => new Date(a.date) - new Date(b.date));
-        
-        console.log("📅 Upcoming Appointments:", upcomingApps);
-        setUpcomingAppointments(upcomingApps.slice(0, 5));
+      // Process appointments by joining with slots
+      const scheduleApps = appointments
+        .filter(apt => 
+          apt.status === 'scheduled' || apt.status === 'Scheduled' || !apt.status || apt.status === 'confirmed'
+        )
+        .map(apt => {
+          // Find the corresponding slot
+          const slot = slots.find(s => s.id === apt.slot_id);
+          
+          // Find patient details
+          const patient = patientsData.find(p => 
+            p.id === apt.member_id || 
+            p.id === apt.patient_id ||
+            `${p.first_name} ${p.last_name}` === apt.patient_name
+          );
+          
+          // Find doctor details
+          const doctor = doctorsData.find(d => 
+            d.id === slot?.doctor_id || 
+            d.id === apt.doctor_id ||
+            d.name === apt.doctor_name
+          );
 
-        // Recent patients (last 5)
-        const recentPatientsData = patients
-          .sort((a, b) => new Date(b.created_date || b.date) - new Date(a.created_date || a.date))
-          .slice(0, 5);
-        
-        console.log("🆕 Recent Patients:", recentPatientsData);
-        setRecentPatients(recentPatientsData);
+          // Extract date and time from slot_time
+          let appointmentDate = 'Date not set';
+          let appointmentTime = 'All day';
+          
+          if (slot && slot.slot_time) {
+            try {
+              const slotTime = new Date(slot.slot_time);
+              if (!isNaN(slotTime.getTime())) {
+                appointmentDate = slotTime.toISOString().split('T')[0]; // YYYY-MM-DD
+                appointmentTime = slotTime.toLocaleTimeString('en-US', {
+                  hour: '2-digit',
+                  minute: '2-digit',
+                  hour12: true
+                });
+              }
+            } catch (error) {
+              console.log('Error parsing slot time:', slot.slot_time);
+            }
+          }
 
-        // Calculate statistics
-        const totalPatients = patients.length;
-        const totalDoctors = doctors.length;
-        const totalAppointments = appointments.length;
-        const totalBills = bills.length;
-        
-        const pendingBills = bills.filter(bill => 
-          bill.status === 'pending' || bill.status === 'Pending'
-        ).length;
-        
-        const upcomingAppointmentsCount = appointments.filter(apt => 
-          new Date(apt.date) > new Date() && 
-          (apt.status === 'scheduled' || apt.status === 'Scheduled' || !apt.status)
-        ).length;
-        
-        const totalRevenue = bills
-          .filter(bill => bill.status === 'paid' || bill.status === 'Paid')
-          .reduce((sum, bill) => sum + (parseFloat(bill.amount) || 0), 0);
+          return {
+            ...apt,
+            slot_details: slot,
+            patient_details: patient,
+            doctor_details: doctor,
+            patient_name: apt.patient_name || (patient ? `${patient.first_name} ${patient.last_name}` : 'Patient'),
+            doctor_name: apt.doctor_name || (doctor ? doctor.name : 'Doctor'),
+            date: appointmentDate,
+            time: appointmentTime,
+            status: apt.status || 'Scheduled'
+          };
+        })
+        .sort((a, b) => new Date(a.date) - new Date(b.date)); // Sort by date
 
-        const completedAppointments = appointments.filter(apt => 
-          apt.status === 'completed' || apt.status === 'Completed'
-        ).length;
-        
-        const completionRate = totalAppointments > 0 ? 
-          Math.round((completedAppointments / totalAppointments) * 100) : 0;
-
-        // Today's appointments count
-        const today = new Date().toISOString().split('T')[0];
-        const todayAppsCount = appointments.filter(apt => apt.date === today).length;
-
-        setStats({
-          total_patients: totalPatients,
-          total_doctors: totalDoctors,
-          total_appointments: totalAppointments,
-          total_bills: totalBills,
-          pending_bills: pendingBills,
-          upcoming_appointments: upcomingAppointmentsCount,
-          today_appointments: todayAppsCount,
-          total_revenue: totalRevenue,
-          completion_rate: completionRate,
-          completed_appointments: completedAppointments
-        });
-
-        generateRecentActivity(data, patients, appointments, bills);
-
-      } catch (error) {
-        console.error("❌ Error fetching admin dashboard data:", error);
-      }
-    };
-
-    loadData();
-  }, []);
-
-  const generateRecentActivity = (data, patients, appointments, bills) => {
-    const activities = [];
-
-    // Recent appointments
-    appointments.slice(0, 3).forEach(apt => {
-      const patientName = apt.patient_name || 
-                         `${apt.patient_first_name || 'Patient'} ${apt.patient_last_name || ''}`.trim() ||
-                         'Patient';
-      const doctorName = apt.doctor_name || 'Doctor';
+      console.log("📅 Enhanced Schedule Appointments:", scheduleApps);
       
-      activities.push({
-        id: `appointment-${apt.id}`,
-        type: 'appointment',
-        title: 'New Appointment',
-        description: `${patientName} with Dr. ${doctorName}`,
-        time: apt.date,
-        icon: CalendarDays,
-        color: 'text-blue-500',
-        bgColor: 'bg-blue-100 dark:bg-blue-900'
+      setScheduleAppointments(scheduleApps.slice(0, 5));
+
+      // Recent patients (last 5)
+      const recentPatientsData = patientsData
+        .sort((a, b) => new Date(b.created_date || b.date) - new Date(a.created_date || a.date))
+        .slice(0, 5);
+      
+      console.log("🆕 Recent Patients:", recentPatientsData);
+      setRecentPatients(recentPatientsData);
+
+      // Calculate statistics
+      const totalPatients = patientsData.length;
+      const totalDoctors = doctorsData.length;
+      const totalAppointments = appointments.length;
+      
+      const today = new Date().toISOString().split('T')[0];
+      const todayAppsCount = scheduleApps.filter(apt => apt.date === today).length;
+      
+      const upcomingAppointmentsCount = scheduleApps.filter(apt => 
+        new Date(apt.date) > new Date() && 
+        (apt.status === 'scheduled' || apt.status === 'Scheduled' || !apt.status)
+      ).length;
+      
+      // TOTAL REVENUE CALCULATION
+      const totalRevenue = bills
+        .filter(bill => bill.status === 'paid' || bill.status === 'Paid')
+        .reduce((sum, bill) => sum + (parseFloat(bill.amount) || 0), 0);
+
+      const completedAppointments = appointments.filter(apt => 
+        apt.status === 'completed' || apt.status === 'Completed'
+      ).length;
+      
+      const completionRate = totalAppointments > 0 ? 
+        Math.round((completedAppointments / totalAppointments) * 100) : 0;
+
+      setStats({
+        total_patients: totalPatients,
+        total_doctors: totalDoctors,
+        total_appointments: totalAppointments,
+        upcoming_appointments: upcomingAppointmentsCount,
+        today_appointments: todayAppsCount,
+        completion_rate: completionRate,
+        completed_appointments: completedAppointments,
+        total_revenue: totalRevenue
       });
-    });
 
-    // Recent patients
-    patients.slice(0, 2).forEach(patient => {
-      activities.push({
-        id: `patient-${patient.id}`,
-        type: 'patient',
-        title: 'New Patient Registered',
-        description: `${patient.first_name || patient.name} ${patient.last_name || ''}`,
-        time: patient.created_date || patient.date,
-        icon: UserPlus,
-        color: 'text-green-500',
-        bgColor: 'bg-green-100 dark:bg-green-900'
-      });
-    });
+      // Generate recent activity
+      generateRecentActivity(scheduleApps, patientsData, bills);
 
-    // Recent bills
-    bills.slice(0, 2).forEach(bill => {
-      activities.push({
-        id: `bill-${bill.id}`,
-        type: 'bill',
-        title: bill.status === 'paid' || bill.status === 'Paid' ? 'Payment Received' : 'New Bill Generated',
-        description: `₹${bill.amount || 0} - ${bill.patient_name || 'Patient'}`,
-        time: bill.bill_date || bill.created_date || bill.date,
-        icon: DollarSign,
-        color: bill.status === 'paid' || bill.status === 'Paid' ? 'text-green-500' : 'text-orange-500',
-        bgColor: bill.status === 'paid' || bill.status === 'Paid' ? 'bg-green-100 dark:bg-green-900' : 'bg-orange-100 dark:bg-orange-900'
-      });
-    });
-
-    // Sort by time and limit to 6 activities
-    const sortedActivities = activities
-      .sort((a, b) => new Date(b.time) - new Date(a.time))
-      .slice(0, 6);
-
-    console.log("📋 Recent Activities:", sortedActivities);
-    setRecentActivity(sortedActivities);
+    } catch (error) {
+      console.error("❌ Error fetching dashboard data:", error);
+    } finally {
+      setLoading(false);
+    }
   };
 
+  loadData();
+}, []);
+const generateRecentActivity = (appointments, patients, bills) => {
+  const activities = [];
+
+  // Recent appointments - now using enhanced appointments with proper dates
+  appointments.slice(0, 3).forEach(apt => {
+    activities.push({
+      id: `appointment-${apt.id}`,
+      type: 'appointment',
+      title: 'New Appointment',
+      description: `${apt.patient_name} with Dr. ${apt.doctor_name}`,
+      time: apt.date, // Now this has proper date
+      icon: CalendarDays,
+      color: 'text-blue-500',
+      bgColor: 'bg-blue-100 dark:bg-blue-900'
+    });
+  });
+
+  // Recent patients
+  patients.slice(0, 2).forEach(patient => {
+    activities.push({
+      id: `patient-${patient.id}`,
+      type: 'patient',
+      title: 'New Patient Registered',
+      description: `${patient.first_name} ${patient.last_name}`,
+      time: patient.created_date,
+      icon: UserPlus,
+      color: 'text-green-500',
+      bgColor: 'bg-green-100 dark:bg-green-900'
+    });
+  });
+
+  // Recent bills
+  bills.slice(0, 2).forEach(bill => {
+    activities.push({
+      id: `bill-${bill.id}`,
+      type: 'bill',
+      title: bill.status === 'paid' || bill.status === 'Paid' ? 'Payment Received' : 'New Bill Generated',
+      description: `₹${bill.amount || 0} - ${bill.patient_name || 'Patient'}`,
+      time: bill.bill_date || bill.created_date || bill.date,
+      icon: DollarSign,
+      color: bill.status === 'paid' || bill.status === 'Paid' ? 'text-green-500' : 'text-orange-500',
+      bgColor: bill.status === 'paid' || bill.status === 'Paid' ? 'bg-green-100 dark:bg-green-900' : 'bg-orange-100 dark:bg-orange-900'
+    });
+  });
+
+  // Sort by time and limit to 6 activities
+  const sortedActivities = activities
+    .sort((a, b) => new Date(b.time) - new Date(a.time))
+    .slice(0, 6);
+
+  setRecentActivity(sortedActivities);
+};
   const handleNavigate = (path) => {
     setCurrentPath(path);
     navigate(path);
+  };
+
+  const handleLogout = async () => {
+    try {
+      await logout();
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
   };
 
   const quickActions = [
@@ -251,47 +299,22 @@ const Dashboard = () => {
     }
   };
 
-  const formatAppointmentDate = (dateString) => {
-    if (!dateString) return 'Date not set';
-    
-    try {
-      const date = new Date(dateString);
-      return date.toLocaleDateString('en-US', {
-        weekday: 'short',
-        month: 'short',
-        day: 'numeric'
-      });
-    } catch (error) {
-      return 'Invalid date';
-    }
-  };
+  // Helper function to format appointment details
+  const getAppointmentDetails = (appointment) => {
+    debugger
+    const patientName = appointment.patient_name || 'Patient';
+    const doctorName = appointment.doctor_name || 'Doctor';
+    const appointmentDate = appointment.date || 'Date not set';
+    const appointmentTime = appointment.time || 'All day';
+    const status = appointment.status || 'Scheduled';
 
-  const formatAppointmentTime = (timeString) => {
-    if (!timeString) return 'All day';
-    
-    const time = timeString.substring(0, 5);
-    return time;
-  };
-
-  const getPatientName = (patient) => {
-    if (patient.name) return patient.name;
-    if (patient.first_name && patient.last_name) return `${patient.first_name} ${patient.last_name}`;
-    if (patient.first_name) return patient.first_name;
-    return `Patient ${patient.id}`;
-  };
-
-  const getDaysUntilAppointment = (dateString) => {
-    if (!dateString) return 0;
-    
-    try {
-      const aptDate = new Date(dateString);
-      const today = new Date();
-      const diffTime = aptDate - today;
-      const diffDays = Math.ceil(diffTime / (1000 * 60 * 60 * 24));
-      return diffDays;
-    } catch (error) {
-      return 0;
-    }
+    return {
+      patientName,
+      doctorName,
+      appointmentDate,
+      appointmentTime,
+      status
+    };
   };
 
   return (
@@ -330,6 +353,17 @@ const Dashboard = () => {
                   className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} transition-colors duration-200`}
                 >
                   {isDark ? '🌙' : '☀️'}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
+                    isDark 
+                      ? 'bg-red-600 hover:bg-red-700 text-white' 
+                      : 'bg-red-100 hover:bg-red-200 text-red-700'
+                  } transition-colors duration-200`}
+                >
+                  <LogOut size={18} />
+                  <span>Logout</span>
                 </button>
               </div>
             </div>
@@ -371,7 +405,7 @@ const Dashboard = () => {
                       Total Patients
                     </p>
                     <p className="text-2xl font-bold mt-2 text-emerald-600">
-                      {stats.total_patients}
+                      {stats.total_patients || 0}
                     </p>
                   </div>
                   <div className={`p-3 rounded-full ${isDark ? 'bg-emerald-900' : 'bg-emerald-100'}`}>
@@ -384,15 +418,15 @@ const Dashboard = () => {
                 </div>
               </div>
 
-              {/* Upcoming Appointments */}
+              {/* Schedule Appointments */}
               <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg border-l-4 border-blue-500`}>
                 <div className="flex items-center justify-between">
                   <div>
                     <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                      Upcoming Appointments
+                      Total Appointments
                     </p>
                     <p className="text-2xl font-bold mt-2 text-blue-600">
-                      {stats.upcoming_appointments}
+                      {stats.total_appointments || 0}
                     </p>
                   </div>
                   <div className={`p-3 rounded-full ${isDark ? 'bg-blue-900' : 'bg-blue-100'}`}>
@@ -400,12 +434,12 @@ const Dashboard = () => {
                   </div>
                 </div>
                 <div className="flex items-center mt-4 text-sm text-blue-600">
-                  <Clock size={16} className="mr-1" />
-                  <span>Next 7 days</span>
+                  <CalendarDays size={16} className="mr-1" />
+                  <span>All Appointments</span>
                 </div>
               </div>
 
-              {/* Total Revenue */}
+              {/* Total Revenue - REPLACED Today's Appointments */}
               <div className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg border-l-4 border-orange-500`}>
                 <div className="flex items-center justify-between">
                   <div>
@@ -413,7 +447,7 @@ const Dashboard = () => {
                       Total Revenue
                     </p>
                     <p className="text-2xl font-bold mt-2 text-orange-600">
-                      {formatCurrency(stats.total_revenue)}
+                      {formatCurrency(stats.total_revenue || 0)}
                     </p>
                   </div>
                   <div className={`p-3 rounded-full ${isDark ? 'bg-orange-900' : 'bg-orange-100'}`}>
@@ -434,7 +468,7 @@ const Dashboard = () => {
                       Completion Rate
                     </p>
                     <p className="text-2xl font-bold mt-2 text-purple-600">
-                      {stats.completion_rate}%
+                      {stats.completion_rate || 0}%
                     </p>
                   </div>
                   <div className={`p-3 rounded-full ${isDark ? 'bg-purple-900' : 'bg-purple-100'}`}>
@@ -450,65 +484,84 @@ const Dashboard = () => {
 
             {/* Main Content Grid */}
             <div className="grid grid-cols-1 lg:grid-cols-3 gap-8">
-              {/* Left Column - Upcoming Appointments & Recent Patients */}
+              {/* Left Column - Schedule Appointments & Recent Patients */}
               <div className="lg:col-span-2 space-y-8">
-                {/* Upcoming Appointments */}
+                {/* Schedule Appointments */}
                 <div className={`rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg transition-colors duration-300`}>
                   <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                     <div className="flex items-center justify-between">
                       <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                        Upcoming Appointments
+                        Scheduled Appointments
                       </h2>
                       <span className={`px-3 py-1 rounded-full text-sm font-medium ${
                         isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800'
                       }`}>
-                        {upcomingAppointments.length} upcoming
+                        {scheduleAppointments.length} scheduled
                       </span>
                     </div>
                   </div>
                   
                   <div className="p-6">
-                    {upcomingAppointments.length > 0 ? (
+                    {loading ? (
+                      <div className="text-center py-8">
+                        <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-blue-600 mx-auto"></div>
+                        <p className={`mt-4 ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>Loading appointments...</p>
+                      </div>
+                    ) : scheduleAppointments.length > 0 ? (
                       <div className="space-y-4">
-                        {upcomingAppointments.map((appointment, index) => {
-                          const daysUntil = getDaysUntilAppointment(appointment.date);
+                        {scheduleAppointments.map((appointment, index) => {
+                          const { patientName, doctorName, appointmentDate, appointmentTime, status } = getAppointmentDetails(appointment);
                           
                           return (
-                            <div key={appointment.id || index} className={`p-4 rounded-lg border ${
+                            <div key={`${appointment.id}-${index}`} 
+                                 className={`p-4 rounded-lg border ${
                               isDark ? 'bg-gray-700 border-gray-600' : 'bg-gray-50 border-gray-200'
                             }`}>
-                              <div className="flex items-center justify-between">
-                                <div className="flex items-center space-x-3">
-                                  <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
-                                    isDark ? 'bg-blue-600' : 'bg-blue-100'
-                                  }`}>
-                                    <Users size={20} className={isDark ? 'text-white' : 'text-blue-600'} />
+                              <div className="flex flex-col space-y-3">
+                                {/* Patient and Doctor Info */}
+                                <div className="flex items-center justify-between">
+                                  <div className="flex items-center space-x-3">
+                                    <div className={`w-10 h-10 rounded-full flex items-center justify-center ${
+                                      isDark ? 'bg-blue-600' : 'bg-blue-100'
+                                    }`}>
+                                      <Users size={20} className={isDark ? 'text-white' : 'text-blue-600'} />
+                                    </div>
+                                    <div>
+                                      <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                                        {patientName}
+                                      </p>
+                                      <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                                        {doctorName}
+                                      </p>
+                                    </div>
                                   </div>
-                                  <div>
-                                    <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                      {appointment.patient_name || 'Patient'}
-                                    </p>
-                                    <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                      with Dr. {appointment.doctor_name || 'Doctor'}
-                                    </p>
+                                  <div className="text-right">
+                                    <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                                      status.toLowerCase() === 'scheduled' 
+                                        ? (isDark ? 'bg-blue-900 text-blue-200' : 'bg-blue-100 text-blue-800')
+                                        : status.toLowerCase() === 'completed'
+                                        ? (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
+                                        : status.toLowerCase() === 'cancelled'
+                                        ? (isDark ? 'bg-red-900 text-red-200' : 'bg-red-100 text-red-800')
+                                        : (isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-200 text-gray-800')
+                                    }`}>
+                                      {status}
+                                    </span>
                                   </div>
                                 </div>
-                                <div className="text-right">
-                                  <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {formatAppointmentDate(appointment.date)}
-                                  </p>
-                                  <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                    {formatAppointmentTime(appointment.time)}
-                                  </p>
-                                  <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
-                                    daysUntil === 0 
-                                      ? (isDark ? 'bg-orange-900 text-orange-200' : 'bg-orange-100 text-orange-800')
-                                      : daysUntil <= 2
-                                      ? (isDark ? 'bg-yellow-900 text-yellow-200' : 'bg-yellow-100 text-yellow-800')
-                                      : (isDark ? 'bg-green-900 text-green-200' : 'bg-green-100 text-green-800')
-                                  }`}>
-                                    {daysUntil === 0 ? 'Today' : daysUntil === 1 ? 'Tomorrow' : `${daysUntil}d`}
-                                  </span>
+                                
+                                {/* Date and Time Info */}
+                                <div className="flex items-center justify-between text-sm">
+                                  <div>
+                                    <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                      Date: <span className={isDark ? 'text-white' : 'text-gray-900'}>{appointmentDate}</span>
+                                    </p>
+                                  </div>
+                                  <div>
+                                    <p className={`font-medium ${isDark ? 'text-gray-300' : 'text-gray-700'}`}>
+                                      Time: <span className={isDark ? 'text-white' : 'text-gray-900'}>{appointmentTime}</span>
+                                    </p>
+                                  </div>
                                 </div>
                               </div>
                             </div>
@@ -518,7 +571,7 @@ const Dashboard = () => {
                     ) : (
                       <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
                         <Calendar size={48} className="mx-auto mb-4 opacity-50" />
-                        <p className="text-lg">No upcoming appointments</p>
+                        <p className="text-lg">No scheduled appointments</p>
                         <p className="mt-2">Schedule new appointments to see them here</p>
                       </div>
                     )}
@@ -567,7 +620,7 @@ const Dashboard = () => {
                                 </div>
                                 <div>
                                   <p className={`font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {getPatientName(patient)}
+                                    {patient.first_name} {patient.last_name}
                                   </p>
                                   <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
                                     {patient.email || 'No email'} • {patient.phone || 'No phone'}
@@ -576,7 +629,7 @@ const Dashboard = () => {
                               </div>
                               <div className="text-right">
                                 <p className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
-                                  {getTimeAgo(patient.created_date || patient.date)}
+                                  {getTimeAgo(patient.created_date)}
                                 </p>
                                 <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
                                   isDark ? 'bg-gray-600 text-gray-200' : 'bg-gray-200 text-gray-800'
@@ -612,7 +665,7 @@ const Dashboard = () => {
 
               {/* Right Column - Quick Actions & Recent Activity */}
               <div className="space-y-8">
-                {/* Quick Actions - Fixed */}
+                {/* Quick Actions */}
                 <div className={`rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg transition-colors duration-300`}>
                   <div className="p-6 border-b border-gray-200 dark:border-gray-700">
                     <h2 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-900'}`}>

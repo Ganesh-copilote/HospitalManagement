@@ -399,12 +399,12 @@ const Patients = () => {
 </AdminModal>
 
             {/* Temporary Debug Info - Remove after fixing */}
-            <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs z-50">
+            {/* <div className="fixed bottom-4 right-4 bg-black text-white p-2 rounded text-xs z-50">
               <div>showModal: {showModal ? 'true' : 'false'}</div>
               <div>editingPatient: {editingPatient ? editingPatient.name : 'null'}</div>
               <div>userType: {userType}</div>
               <div>addUserType: {addUserType}</div>
-            </div>
+            </div> */}
           </main>
         </div>
       </div>

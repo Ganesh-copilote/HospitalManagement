@@ -1029,7 +1029,7 @@ const handleDelete = async (itemId) => {
             </div>
 
             {/* Charts Section */}
-            {!loading && activeTab === 'appointments' && (
+            {/* {!loading && activeTab === 'appointments' && (
               <div className="grid grid-cols-1 lg:grid-cols-2 gap-6 mt-8">
                 <ChartCard 
                   title="Appointments by Status" 
@@ -1046,7 +1046,7 @@ const handleDelete = async (itemId) => {
                   isDark={isDark}
                 />
               </div>
-            )}
+            )} */}
           </main>
         </div>
       </div>

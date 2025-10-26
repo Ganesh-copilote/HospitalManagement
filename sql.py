@@ -19,55 +19,55 @@
 
 
 
-import sqlite3
-
-conn = sqlite3.connect("hospital1.db")
-cursor = conn.cursor()
-
-# choose table name
-table_name = "doctors"  # Change this to the table you want to query
-# cursor.execute("PRAGMA table_info(bills);")
-# # 
-# # fetch all rows
-# # cursor.execute(f"PRAGMA table_info({table_name});")
-cursor.execute(f"SELECT * FROM {table_name};")
-rows = cursor.fetchall()
-
-print(f"Data from {table_name} table:")
-for row in rows:  
-    print(row)
-
-conn.close()
-import sqlite3
-
-
-
-
 # import sqlite3
 
-# doctor_id = 1  # for example
+# conn = sqlite3.connect("hospital1.db")
+# cursor = conn.cursor()
 
-# conn = sqlite3.connect('hospital1.db')
-# c = conn.cursor()
-# from datetime import date
+# # choose table name
+# table_name = "slots"  # Change this to the table you want to query
+# # cursor.execute("PRAGMA table_info(bills);")
+# # # 
+# # # fetch all rows
+# # # cursor.execute(f"PRAGMA table_info({table_name});")
+# cursor.execute(f"SELECT * FROM {table_name};")
+# rows = cursor.fetchall()
 
-# # Fetch today's slots for this doctor
-# doctor_id = 1
-# date = "2025-10-19"
+# print(f"Data from {table_name} table:")
+# for row in rows:  
+#     print(row)
 
-# c.execute("""
-#     SELECT id, doctor_id, slot_time
-# FROM slots
-# WHERE slot_time LIKE '2025-10-19%'
-# ORDER BY doctor_id, slot_time;
-# """)
-
-# slots_today = c.fetchall()
-
-# for slot in slots_today:
-#     print(slot)
-# print("hello")
 # conn.close()
+# import sqlite3
+
+
+
+
+import sqlite3
+
+doctor_id = 42  # for example
+
+conn = sqlite3.connect('hospital1.db')
+c = conn.cursor()
+from datetime import date
+
+# Fetch today's slots for this doctor
+doctor_id = '42'
+date = "2025-10-27"
+
+c.execute("""
+    SELECT id, doctor_id, slot_time
+FROM slots
+WHERE slot_time LIKE '2025-10-27%'
+ORDER BY doctor_id, slot_time;
+""")
+
+slots_today = c.fetchall()
+
+for slot in slots_today:
+    print(slot)
+print("hello")
+conn.close()
 
 
 

@@ -851,7 +851,7 @@ const FrontOfficeDashboard = () => {
     },
     { 
       title: "Today's Collections", 
-      value: `$${data.todays_collections}`, 
+      value: `0`, //$${data.todays_collections}
       description: "Total collections for today",
       change: "+18%",
       changeType: "positive",
@@ -869,34 +869,34 @@ const FrontOfficeDashboard = () => {
 
   // Data insights cards
   const insights = [
-    {
-      title: "Total Patients Today",
-      value: data.total_patients_today,
-      description: "Patients registered today",
-      icon: "👥",
-      gradient: "from-cyan-500 to-blue-500"
-    },
-    {
-      title: "Pending Payments",
-      value: data.pending_payments,
-      description: "Payments awaiting processing",
-      icon: "💰",
-      gradient: "from-amber-500 to-orange-500"
-    },
-    {
-      title: "Insurance Claims",
-      value: data.insurance_claims,
-      description: "Claims to be processed",
-      icon: "📄",
-      gradient: "from-emerald-500 to-green-500"
-    },
-    {
-      title: "Avg Daily Appointments",
-      value: Math.round(data.scheduled_today * 0.8),
-      description: "7-day average",
-      icon: "📊",
-      gradient: "from-violet-500 to-purple-500"
-    }
+    // {
+    //   title: "Total Patients Today",
+    //   value: data.total_patients_today,
+    //   description: "Patients registered today",
+    //   icon: "👥",
+    //   gradient: "from-cyan-500 to-blue-500"
+    // },
+    // {
+    //   title: "Pending Payments",
+    //   value: data.pending_payments,
+    //   description: "Payments awaiting processing",
+    //   icon: "💰",
+    //   gradient: "from-amber-500 to-orange-500"
+    // },
+    // {
+    //   title: "Insurance Claims",
+    //   value: data.insurance_claims,
+    //   description: "Claims to be processed",
+    //   icon: "📄",
+    //   gradient: "from-emerald-500 to-green-500"
+    // },
+    // {
+    //   title: "Avg Daily Appointments",
+    //   value: Math.round(data.scheduled_today * 0.8),
+    //   description: "7-day average",
+    //   icon: "📊",
+    //   gradient: "from-violet-500 to-purple-500"
+    // }
   ];
 
   const getStatusBadge = (status) => {
@@ -968,7 +968,7 @@ const FrontOfficeDashboard = () => {
 
   return (
     <>
-      <Navbar isDashboard={true} userName="Alexandro" userType="front_office" />
+      <Navbar isDashboard={true} serType="front_office" />{/*userName="Alexandro"*/}
       <div className="min-h-screen bg-gray-50 pt-20">
         
 
@@ -993,7 +993,7 @@ const FrontOfficeDashboard = () => {
                 className="bg-white rounded-xl shadow-sm border border-gray-200 overflow-hidden"
               >
                 <div className="p-6 border-b border-gray-200 bg-gradient-to-r from-gray-50 to-white">
-                  <h2 className="font-semibold text-lg text-gray-900">Overview</h2>
+                  <h2 className="font-semibold text-lg text-gray-900">Front Office Dashboard</h2>
                 </div>
                 <ul className="divide-y divide-gray-100">
                   {[

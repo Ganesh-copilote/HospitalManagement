@@ -1167,7 +1167,7 @@ const renderPrescriptions = () => (
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Patient</th>
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Amount</th>
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Status</th>
-                <th className="p-4 text-left text-sm font-medium text-gray-700">Date</th>
+                <th className="p-4 text-left text-sm font-medium text-gray-700">Date & TIme</th>
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Description</th>
                 <th className="p-4 text-left text-sm font-medium text-gray-700">Actions</th>
               </tr>
@@ -1323,7 +1323,7 @@ const renderPrescriptions = () => (
             
             <nav className="space-y-2 px-4">
               {[
-                { id: 'dashboard', name: 'Dashboard', icon: '📊' },
+                { id: 'dashboard', name: 'Patient Dashboard', icon: '📊' },
                 { id: 'profile', name: 'Profile', icon: '👤' },
                 { id: 'appointments', name: 'Appointments', icon: '📅' },
                 { id: 'medical', name: 'Medical Records', icon: '📋' },

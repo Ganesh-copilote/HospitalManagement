@@ -668,7 +668,7 @@ const BillForm = ({ bill, onSave, onCancel, isDark }) => {
                                 >
                                   <Trash2 size={16} className={isDark ? 'text-white' : 'text-red-600'} />
                                 </motion.button>
-                                <motion.button
+                                {/* <motion.button
                                   whileHover={{ scale: 1.1 }}
                                   whileTap={{ scale: 0.9 }}
                                   className={`p-2 rounded ${
@@ -676,7 +676,7 @@ const BillForm = ({ bill, onSave, onCancel, isDark }) => {
                                   } transition-colors duration-200`}
                                 >
                                   <Download size={16} className={isDark ? 'text-white' : 'text-emerald-600'} />
-                                </motion.button>
+                                </motion.button> */}
                               </div>
                             </td>
                           </>

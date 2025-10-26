@@ -86,6 +86,114 @@ def generate_slots_for_doctor(doctor_id, days):
     print(f"✅ Inserted {len(slots)} slots for doctor {doctor_id}")
 
 
+def generate_slots_for_doctor_for_admin(doctor_id, days, conn=None):
+    print("calling generate_slots_for_doctor")
+    from datetime import datetime, timedelta
+
+    slots = []
+    start_date = datetime.now().date()
+
+    for i in range(days):
+        current_date = start_date + timedelta(days=i)
+        day_of_week = current_date.weekday()  # 0=Mon, 6=Sun
+
+        if day_of_week < 5:  # Weekdays
+            hours = list(range(10, 13)) + list(range(14, 18))
+        else:  # Weekends
+            hours = list(range(10, 13))
+
+        for hour in hours:
+            for minute in [0, 30]:
+                slot_time = datetime.combine(current_date, datetime.min.time()).replace(
+                    hour=hour, minute=minute, second=0
+                )
+                slots.append((
+                    doctor_id,
+                    slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+                    0
+                ))
+
+    # Use the existing connection if provided, otherwise create new
+    if conn:
+        c = conn.cursor()
+        c.executemany('INSERT INTO slots (doctor_id, slot_time, booked) VALUES (?, ?, ?)', slots)
+        conn.commit()
+    else:
+        # Fallback to SQLAlchemy if no connection provided
+        from app1 import db
+        for slot_data in slots:
+            slot = Slot(doctor_id=slot_data[0], slot_time=slot_data[1], booked=slot_data[2])
+            db.session.add(slot)
+        db.session.commit()
+    
+    print(f"✅ Inserted {len(slots)} slots for doctor {doctor_id}")
+# imports (add to top of your file)
+import os
+import smtplib
+from email.mime.text import MIMEText
+from itsdangerous import URLSafeTimedSerializer, BadSignature, SignatureExpired
+from werkzeug.security import generate_password_hash
+from flask import current_app, request, url_for
+
+# config helpers
+SECRET_KEY = os.getenv('SECRET_KEY') 
+MAIL_SERVER = os.getenv('MAIL_SERVER')
+MAIL_PORT = int(os.getenv('MAIL_PORT') or 587)
+MAIL_USERNAME = os.getenv('MAIL_USERNAME')
+MAIL_PASSWORD = os.getenv('MAIL_PASSWORD')
+MAIL_USE_TLS = os.getenv('MAIL_USE_TLS', 'True').lower() in ('true', '1', 'yes')
+MAIL_USE_SSL = os.getenv('MAIL_USE_SSL', 'False').lower() in ('true', '1', 'yes')
+MAIL_FROM = os.getenv('MAIL_FROM') or MAIL_USERNAME
+FRONTEND_URL = os.getenv('FRONTEND_URL')  # optional: preferred for reset links
+
+# token serializer
+def get_serializer():
+    key = SECRET_KEY or current_app.config.get('SECRET_KEY')
+    return URLSafeTimedSerializer(key)
+
+# email sending helper (simple using smtplib)
+def send_email(to_email: str, subject: str, body: str):
+    print("coming into sned email")
+    if not MAIL_SERVER or not MAIL_USERNAME or not MAIL_PASSWORD:
+        raise RuntimeError("Mail server not configured. Please set MAIL_SERVER, MAIL_USERNAME, MAIL_PASSWORD.")
+    msg = MIMEText(body, "html")
+    msg['Subject'] = subject
+    msg['From'] = MAIL_FROM
+    msg['To'] = to_email
+
+    # choose SSL or TLS
+    if MAIL_USE_SSL:
+        server = smtplib.SMTP_SSL(MAIL_SERVER, MAIL_PORT)
+    else:
+        server = smtplib.SMTP(MAIL_SERVER, MAIL_PORT)
+    try:
+        server.ehlo()
+        if MAIL_USE_TLS and not MAIL_USE_SSL:
+            server.starttls()
+            server.ehlo()
+        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+        server.sendmail(MAIL_FROM, [to_email], msg.as_string())
+    finally:
+        server.quit()
+
+# generate password reset token
+def generate_reset_token(email):
+    s = get_serializer()
+    return s.dumps({'email': email})
+
+# verify token, returns email
+def verify_reset_token(token, max_age_seconds=3600):
+    s = get_serializer()
+    try:
+        data = s.loads(token, max_age=max_age_seconds)
+        return data.get('email')
+    except SignatureExpired:
+        raise
+    except BadSignature:
+        raise
+
+
+
 from flask import make_response
 
 # Add these imports at the top
@@ -145,6 +253,7 @@ def api_available_slots():
         ''', (doctor_id, date))
 
         available_slots = c.fetchall()
+        print("Available_slots",available_slots)
         print(f"🟢 Found {len(available_slots)} unbooked slots for doctor {doctor_id} on {date}")
 
         formatted_slots = []
@@ -412,9 +521,11 @@ def admin_dashboard():
         print("Error in admin_dashboard:", e)
         return jsonify({'error': str(e)}), 500
 
+from flask import Flask, jsonify, session
 
+# Add this flag to control behavior: default False -> send reset link
+SEND_PLAIN_PASSWORD_IN_EMAIL = True  # CHANGE TO True only for testing, not production
 
-# Update the registration endpoint
 @app.route('/api/register', methods=['POST'])
 def api_register():
     data = request.get_json() or {}
@@ -475,15 +586,55 @@ def api_register():
         session['user_type'] = 'patient'
         session['member_id'] = member_id
 
+        # ---------- Email logic ----------
+        if email:
+            try:
+                print(email)
+                if SEND_PLAIN_PASSWORD_IN_EMAIL and password:
+                    print("getting inside")
+                    # Warning: this emails plaintext password — insecure
+                    subject = "Your account details"
+                    body = f"""
+                        <p>Hi {first_name},</p>
+                        <p>Your account has been created.</p>
+                        <ul>
+                          <li><strong>Username / Email:</strong> {email}</li>
+                          <li><strong>Password:</strong> {password}</li>
+                        </ul>
+                        <p>Please change your password after first login.</p>
+                    """
+                    send_email(email, subject, body)
+                else:
+                    # Preferred: send password reset link so they create a password securely
+                    token = generate_reset_token(email)
+                    # build reset url - prefer FRONTEND_URL if set, else use request.host_url
+                    base = FRONTEND_URL or (request.host_url.rstrip('/'))
+                    reset_path = f"/reset-password?token={token}"  # adapt to your frontend route
+                    reset_url = f"{base}{reset_path}"
+
+                    subject = "Set your password"
+                    body = f"""
+                        <p>Hi {first_name},</p>
+                        <p>Welcome — your account was created successfully. To set your password, click the link below (valid for 1 hour):</p>
+                        <p><a href="{reset_url}">Set your password</a></p>
+                        <p>If you didn't request this, ignore this email.</p>
+                    """
+                    send_email(email, subject, body)
+            except Exception as mail_exc:
+                # Log mail failure but don't break registration
+                current_app.logger.exception("Failed to send registration email: %s", mail_exc)
+
         return jsonify({'success': True, 'message': 'Registration successful', 'family_id': uid})
 
     except Exception as e:
         if conn:
             conn.rollback()
+        current_app.logger.exception("Registration error")
         return jsonify({'success': False, 'error': str(e)}), 500
     finally:
         if conn:
             conn.close()
+
 
 
 @app.route('/api/front_office_register', methods=['POST'])
@@ -570,15 +721,38 @@ from flask import request, jsonify, session
 import sqlite3
 import hashlib
 from werkzeug.security import check_password_hash
+from werkzeug.security import check_password_hash, generate_password_hash
+
 @app.route('/api/login', methods=['POST'])
 def login():
     data = request.get_json()
     identifier = data.get('identifier')
     password = data.get('password')
     family_id = data.get('family_id')
-    print(f"Login attempt with identifier={identifier}, family_id={family_id}"  )
+    print(f"Login attempt with identifier={identifier}, family_id={family_id}")
     conn = get_db()
     c = conn.cursor()
+
+    # Temporary hardcoded credentials for testing
+    TEMP_CREDENTIALS = {
+        'admin@familycareconnect.com': {'password': 'admin123', 'user_type': 'admin', 'id': 'admin_temp'},
+        'alice.smith@hospital.com': {'password': 'alice123', 'user_type': 'doctor', 'id': 'doctor_temp'},
+        'radha.kumar@hospital.com': {'password': 'radha123', 'user_type': 'front_office', 'id': 'front_office_temp'}
+    }
+
+    # Check temporary credentials first
+    if identifier in TEMP_CREDENTIALS:
+        temp_user = TEMP_CREDENTIALS[identifier]
+        if password == temp_user['password']:
+            session['user_type'] = temp_user['user_type']
+            session['family_id'] = temp_user['id']
+            conn.close()
+            print(f"Temporary login successful as {temp_user['user_type']}")
+            return jsonify({
+                'success': True, 
+                'user_type': temp_user['user_type'], 
+                'message': f'Login successful as {temp_user["user_type"]} (temporary credentials)'
+            })
 
     if family_id:  # Family ID login (for members)
         c.execute('SELECT * FROM members WHERE family_id = ?', (family_id,))
@@ -595,7 +769,8 @@ def login():
         admin = c.fetchone()
         if admin:
             stored_hash = admin[3]  # password_hash is at index 3
-            if stored_hash == hashlib.sha256(password.encode()).hexdigest():
+            # FIX: Use check_password_hash instead of sha256
+            if check_password_hash(stored_hash, password):
                 session['user_type'] = 'admin'
                 session['family_id'] = admin[1]  # id is at index 0
                 conn.close()
@@ -606,12 +781,12 @@ def login():
         doctor = c.fetchone()
         if doctor:
             stored_hash = doctor[6]  # password_hash is at index 6
-            if stored_hash == hashlib.sha256(password.encode()).hexdigest():
+            # FIX: Use check_password_hash instead of sha256
+            if check_password_hash(stored_hash, password):
                 session['user_type'] = 'doctor'
                 session['family_id'] = doctor[1]  # id is at index 0
                 print(doctor[1])
                 conn.close()
-                
                 print(session['user_type'],session['family_id'])
                 return jsonify({'success': True, 'user_type': 'doctor', 'message': 'Login successful as doctor'})
 
@@ -620,7 +795,8 @@ def login():
         front_office = c.fetchone()
         if front_office:
             stored_hash = front_office[6]  # password_hash is at index 6
-            if stored_hash == hashlib.sha256(password.encode()).hexdigest():
+            # FIX: Use check_password_hash instead of sha256
+            if check_password_hash(stored_hash, password):
                 session['user_type'] = 'front_office'
                 session['family_id'] = front_office[1]  # id is at index 0
                 conn.close()
@@ -632,25 +808,17 @@ def login():
         if patient:
             print(patient)
             stored_hash = patient[14]  # password_hash is at index 14
-            print("hiiiiiiiii")
-            session['user_type'] = 'patient'
-            session['family_id'] = patient[1]  # family_id is at index 1
-            conn.close()
-            print(session['user_type'],session['family_id'])
-            return jsonify({'success': True, 'user_type': 'patient', 'message': 'Login successful as patient'})
-
-            # if stored_hash == hashlib.sha256(password.encode()).hexdigest():
-            #     print("hiiiiiiiii")
-            #     session['user_type'] = 'patient'
-            #     session['family_id'] = patient[1]  # family_id is at index 1
-            #     conn.close()
-            #     print(session['user_type'],session['family_id'])
-            #     return jsonify({'success': True, 'user_type': 'patient', 'message': 'Login successful as patient'})
+            # FIX: Use check_password_hash for patients too
+            if check_password_hash(stored_hash, password):
+                print("hiiiiiiiii")
+                session['user_type'] = 'patient'
+                session['family_id'] = patient[1]  # family_id is at index 1
+                conn.close()
+                print(session['user_type'],session['family_id'])
+                return jsonify({'success': True, 'user_type': 'patient', 'message': 'Login successful as patient'})
 
     conn.close()
     return jsonify({'success': False, 'error': 'Invalid credentials'}), 401
-
-
 
 
 @app.route('/api/admin/front_office_data', methods=['GET'])
@@ -1556,6 +1724,7 @@ def admin_add_patient():
     
 
 # Unified add route for all user types including appointments and slots
+# Unified add route for all user types including appointments and slots
 @app.route('/api/admin/users/add', methods=['POST'])
 def admin_add_user():
     if 'user_type' not in session or session.get('user_type') != 'admin':
@@ -1590,6 +1759,8 @@ def admin_add_user():
             c.execute('INSERT INTO families (id, user_type) VALUES (?, ?)', (family_id, db_user_type))
             
             user_id = None
+            user_email = None
+            user_name = None
             
             if user_type == 'patient':
                 # Validate required fields for patient
@@ -1597,6 +1768,9 @@ def admin_add_user():
                 for field in required_fields:
                     if not data.get(field):
                         return jsonify({'success': False, 'error': f'{field} is required'}), 400
+                
+                user_email = data.get('email')
+                user_name = f"{data.get('first_name')} {data.get('last_name')}"
                 
                 # Create patient in members table
                 c.execute('''
@@ -1612,7 +1786,7 @@ def admin_add_user():
                     data.get('middle_name', ''),
                     data.get('age'),
                     data.get('gender', ''),
-                    data.get('email'),
+                    user_email,
                     data.get('phone'),
                     data.get('address', ''),
                     data.get('aadhar', ''),
@@ -1629,6 +1803,9 @@ def admin_add_user():
                     if not data.get(field):
                         return jsonify({'success': False, 'error': f'{field} is required'}), 400
                 
+                user_email = data.get('email')
+                user_name = data.get('name')
+                
                 # Create doctor in doctors table
                 c.execute('''
                     INSERT INTO doctors (
@@ -1636,13 +1813,14 @@ def admin_add_user():
                     ) VALUES (?, ?, ?, ?, ?, ?)
                 ''', (
                     family_id,
-                    data.get('name'),
+                    user_name,
                     data.get('specialty'),
-                    data.get('email'),
+                    user_email,
                     data.get('phone'),
                     password_hash
                 ))
                 user_id = c.lastrowid
+                generate_slots_for_doctor_for_admin(doctor_id=user_id,days=7,conn=conn)
                 
             elif user_type == 'frontoffice':
                 # Validate required fields for front office
@@ -1650,6 +1828,9 @@ def admin_add_user():
                 for field in required_fields:
                     if not data.get(field):
                         return jsonify({'success': False, 'error': f'{field} is required'}), 400
+                
+                user_email = data.get('email')
+                user_name = f"{data.get('first_name')} {data.get('last_name')}"
                 
                 # Create front office in front_office table
                 c.execute('''
@@ -1660,7 +1841,7 @@ def admin_add_user():
                     family_id,
                     data.get('first_name'),
                     data.get('last_name'),
-                    data.get('email'),
+                    user_email,
                     data.get('phone'),
                     password_hash,
                 ))
@@ -1668,6 +1849,15 @@ def admin_add_user():
             
             conn.commit()
             conn.close()
+            
+            # Send email with credentials if email was provided
+            if user_email:
+                print("coming inside the ail ready for sending")
+                try:
+                    send_admin_created_credentials(user_email, user_name, user_type, user_email, random_password)
+                except Exception as email_error:
+                    # Log the email error but don't fail the user creation
+                    logger.error(f"Failed to send email to {user_email}: {email_error}")
             
             logger.info(f"{user_type.capitalize()} created successfully with ID: {user_id}, family_id: {family_id}")
             return jsonify({
@@ -2384,6 +2574,108 @@ def admin_delete_doctor(doctor_id):
         logger.error(f"Admin delete doctor error: {e}")
         return jsonify({'success': False, 'error': str(e)})
 
+# Correct imports (note the capitalization)
+from email.mime.text import MIMEText
+
+from email.mime.multipart import MIMEMultipart
+
+def send_admin_created_credentials(recipient_email, name, user_type, username, password):
+    """Send email with login credentials for admin-created users"""
+    
+    user_type_display = {
+        'patient': 'Patient',
+        'doctor': 'Doctor', 
+        'frontoffice': 'Staff Member'
+    }.get(user_type, 'User')
+    
+    # Create message
+    subject = f"Your {user_type_display} Account Has Been Created"
+    
+    # HTML email content
+    html = f"""
+    <html>
+        <body>
+            <h2>Welcome to Our Healthcare System, {name}!</h2>
+            <p>Your {user_type_display.lower()} account has been created by the administrator.</p>
+            <p>Here are your login details:</p>
+            <table style="border-collapse: collapse; width: 100%; max-width: 500px; margin: 20px 0;">
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background-color: #f8f9fa; font-weight: bold; width: 40%;">Username/Email:</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{username}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background-color: #f8f9fa; font-weight: bold;">Password:</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{password}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background-color: #f8f9fa; font-weight: bold;">Account Type:</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{user_type_display}</td>
+                </tr>
+            </table>
+            
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin: 20px 0;">
+                <strong>⚠️ Security Notice:</strong> 
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>This is a system-generated password</li>
+                    <li>Please change your password after first login</li>
+                    <li>Keep your login credentials secure and confidential</li>
+                </ul>
+            </div>
+            
+            <p>You can access the system at: <a href="{request.host_url}login">{request.host_url}login</a></p>
+            
+            <p>If you have any questions or need assistance, please contact the system administrator.</p>
+            
+            <br>
+            <p>Best regards,<br>Healthcare System Administration</p>
+        </body>
+    </html>
+    """
+    
+    # Plain text version
+    text = f"""
+    Welcome to Our Healthcare System, {name}!
+
+    Your {user_type_display.lower()} account has been created by the administrator.
+
+    Here are your login details:
+    Username/Email: {username}
+    Password: {password}
+    Account Type: {user_type_display}
+
+    Security Notice:
+    - This is a system-generated password
+    - Please change your password after first login  
+    - Keep your login credentials secure and confidential
+
+    You can access the system at: {request.host_url}login
+
+    If you have any questions or need assistance, please contact the system administrator.
+
+    Best regards,
+    Healthcare System Administration
+    """
+    
+    # Create message container
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = MAIL_FROM
+    msg['To'] = recipient_email
+    
+    # Attach both HTML and plain text versions
+    part1 = MIMEText(text, 'plain')
+    part2 = MIMEText(html, 'html')
+    
+    msg.attach(part1)
+    msg.attach(part2)
+    
+    # Send email
+    with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+        server.starttls()
+        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+        server.send_message(msg)
+    
+    logger.info(f"Credentials email sent to {recipient_email} for {user_type_display} account")
 
 
 @app.route('/api/doctor_dashboard')

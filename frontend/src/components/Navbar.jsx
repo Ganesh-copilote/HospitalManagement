@@ -28,7 +28,7 @@ const handleLogout = async () => {
           </div>
         ) : (
           <div className="flex items-center space-x-4">
-            <span>Welcome, {userName}</span>
+            <span>Welcome {userName}</span>
             {userType === 'admin' && (
               <a href="/admin" className="bg-white text-blue-600 py-1 px-3 rounded hover:bg-gray-100">Admin Panel</a>
             )}
