@@ -1,8 +1,8 @@
 import { useState, useEffect } from 'react';
 import { useNavigate } from 'react-router-dom';
 import { getDoctorDashboardData } from '../services/api';
-import Navbar from '../components/Navbar';
-import StatCard from '../components/StatCard';
+import DoctorSidebar from '../components/DoctorSidebar';
+import { Menu, LogOut, Users, Calendar, FileText } from 'lucide-react';
 
 const DoctorDashboard = () => {
   const [data, setData] = useState({
@@ -16,263 +16,357 @@ const DoctorDashboard = () => {
     }
   });
   const [error, setError] = useState('');
+  const [sidebarOpen, setSidebarOpen] = useState(true);
+  const [isDark, setIsDark] = useState(false);
+  const [currentPath, setCurrentPath] = useState('/doctor_dashboard');
+  const [loading, setLoading] = useState(true);
+  
   const navigate = useNavigate();
 
   useEffect(() => {
     const fetchData = async () => {
       try {
+        setLoading(true);
         const res = await getDoctorDashboardData();
         setData(res);
       } catch (err) {
-        setError(err);
+        setError(err.message || 'Failed to fetch data');
+      } finally {
+        setLoading(false);
       }
     };
     fetchData();
   }, []);
 
-  return (
-    <>
-      <Navbar isDashboard={true} userName={data.profile.name || 'Doctor'} userType="doctor" />
-      
-      <div className="min-h-screen bg-gray-50 pt-20 px-4">
-        {error && (
-          <div className="container mx-auto">
-            <div className="bg-red-100 border-l-4 border-red-500 text-red-700 p-4 mb-6 rounded-md shadow-sm">
-              {error}
-            </div>
-          </div>
-        )}
-        
-        <div className="container mx-auto">
-          <div className="flex flex-col lg:flex-row gap-6">
-            {/* Sidebar Navigation */}
-            <div className="w-full lg:w-64 flex-shrink-0">
-              <div className="bg-white rounded-xl shadow-sm overflow-hidden mb-6 border border-gray-100">
-                <div className="bg-gradient-to-r from-blue-600 to-indigo-700 text-white p-5">
-                  <h2 className="font-bold text-lg">Doctor Dashboard</h2>
-                  <p className="text-blue-100 text-sm mt-1">Welcome back, Doctor</p>
-                </div>
-                <ul className="divide-y divide-gray-100">
-                  <li>
-                    <a href="/doctor_appointments" className="flex items-center p-4 hover:bg-blue-50 text-gray-700 transition-colors duration-150">
-                      <svg className="w-5 h-5 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                      </svg>
-                      Appointments
-                    </a>
-                  </li>
-                  <li>
-                    <a href="/doctor_patients" className="flex items-center p-4 hover:bg-blue-50 text-gray-700 transition-colors duration-150">
-                      <svg className="w-5 h-5 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                      </svg>
-                      Patients
-                    </a>
-                  </li>
-                  <li>
-                    <a href="/doctor_medical_records" className="flex items-center p-4 hover:bg-blue-50 text-gray-700 transition-colors duration-150">
-                      <svg className="w-5 h-5 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                      </svg>
-                      Medical Records
-                    </a>
-                  </li>
-                  <li>
-                    <a href="/doctor_prescriptions" className="flex items-center p-4 hover:bg-blue-50 text-gray-700 transition-colors duration-150">
-                      <svg className="w-5 h-5 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                      </svg>
-                      Prescriptions
-                    </a>
-                  </li>
-                  <li>
-                    <a href="/doctor_schedule" className="flex items-center p-4 hover:bg-blue-50 text-gray-700 transition-colors duration-150">
-                      <svg className="w-5 h-5 mr-3 text-blue-500" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2m-3 7h3m-3 4h3m-6-4h.01M9 16h.01"></path>
-                      </svg>
-                      Schedule
-                    </a>
-                  </li>
-                </ul>
-              </div>
-            </div>
-            
-            {/* Main Content */}
-            <div className="flex-1">
-              {/* Stats Overview */}
-              <section className="bg-white rounded-xl shadow-sm p-6 mb-6 border border-gray-100">
-                <h2 className="font-bold text-xl text-gray-800 mb-6">Overview</h2>
-                <div className="grid grid-cols-1 md:grid-cols-3 gap-5">
-                  <div className="bg-gradient-to-br from-blue-50 to-indigo-50 rounded-xl p-5 border border-blue-100">
-                    <div className="flex items-center">
-                      <div className="bg-blue-100 p-3 rounded-lg mr-4">
-                        <svg className="w-6 h-6 text-blue-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Total Appointments</p>
-                        <p className="text-2xl font-bold text-gray-800">{data.stats.total_appointments}</p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gradient-to-br from-green-50 to-emerald-50 rounded-xl p-5 border border-green-100">
-                    <div className="flex items-center">
-                      <div className="bg-green-100 p-3 rounded-lg mr-4">
-                        <svg className="w-6 h-6 text-green-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M12 4.354a4 4 0 110 5.292M15 21H3v-1a6 6 0 0112 0v1zm0 0h6v-1a6 6 0 00-9-5.197m13.5-9a2.5 2.5 0 11-5 0 2.5 2.5 0 015 0z"></path>
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Patients Today</p>
-                        <p className="text-2xl font-bold text-gray-800">{data.stats.patients_today}</p>
-                      </div>
-                    </div>
-                  </div>
-                  
-                  <div className="bg-gradient-to-br from-purple-50 to-violet-50 rounded-xl p-5 border border-purple-100">
-                    <div className="flex items-center">
-                      <div className="bg-purple-100 p-3 rounded-lg mr-4">
-                        <svg className="w-6 h-6 text-purple-600" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                          <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5H7a2 2 0 00-2 2v12a2 2 0 002 2h10a2 2 0 002-2V7a2 2 0 00-2-2h-2M9 5a2 2 0 002 2h2a2 2 0 002-2M9 5a2 2 0 012-2h2a2 2 0 012 2"></path>
-                        </svg>
-                      </div>
-                      <div>
-                        <p className="text-sm text-gray-500">Prescriptions Issued</p>
-                        <p className="text-2xl font-bold text-gray-800">{data.stats.prescriptions_issued}</p>
-                      </div>
-                    </div>
-                  </div>
-                </div>
-              </section>
-              
-              <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
-                {/* Upcoming Appointments */}
-                <section className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="font-bold text-xl text-gray-800">Upcoming Appointments</h2>
-                    <a href="/doctor_appointments" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                      View All
-                    </a>
-                  </div>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Patient</th>
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Date</th>
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Time</th>
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Actions</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.upcoming_appointments.map((apt, index) => (
-                          <tr key={apt.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors duration-150">
-                            <td className="py-3 px-2">
-                              <div className="flex items-center">
-                                <div className="w-8 h-8 rounded-full bg-blue-100 flex items-center justify-center text-blue-600 font-medium mr-3">
-                                  {apt.patient_name.charAt(0)}
-                                </div>
-                                <span className="font-medium text-gray-800">{apt.patient_name}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-2 text-gray-600">{apt.date}</td>
-                            <td className="py-3 px-2">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-blue-100 text-blue-800">
-                                {apt.time}
-                              </span>
-                            </td>
-                            <td className="py-3 px-2">
-                              <a 
-                                href={`/doctor_view_patient/${apt.patient_id}`} 
-                                className="text-blue-600 hover:text-blue-800 font-medium text-sm inline-flex items-center"
-                              >
-                                View
-                                <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                                  <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
-                                </svg>
-                              </a>
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  {data.upcoming_appointments.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <svg className="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M8 7V3m8 4V3m-9 8h10M5 21h14a2 2 0 002-2V7a2 2 0 00-2-2H5a2 2 0 00-2 2v12a2 2 0 002 2z"></path>
-                      </svg>
-                      <p className="mt-2">No upcoming appointments</p>
-                    </div>
-                  )}
-                </section>
-                
-                {/* Recent Medical Records */}
-                <section className="bg-white rounded-xl shadow-sm p-6 border border-gray-100">
-                  <div className="flex justify-between items-center mb-6">
-                    <h2 className="font-bold text-xl text-gray-800">Recent Medical Records</h2>
-                    <a href="/doctor_medical_records" className="text-sm text-blue-600 hover:text-blue-800 font-medium">
-                      View All
-                    </a>
-                  </div>
-                  
-                  <div className="overflow-x-auto">
-                    <table className="w-full">
-                      <thead>
-                        <tr className="border-b border-gray-200">
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Patient</th>
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Type</th>
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Date</th>
-                          <th className="text-left py-3 px-2 text-sm font-medium text-gray-500">Description</th>
-                        </tr>
-                      </thead>
-                      <tbody>
-                        {data.recent_records.map((record, index) => (
-                          <tr key={record.id} className="border-b border-gray-100 last:border-0 hover:bg-gray-50 transition-colors duration-150">
-                            <td className="py-3 px-2">
-                              <div className="flex items-center">
-                                <div className="w-8 h-8 rounded-full bg-green-100 flex items-center justify-center text-green-600 font-medium mr-3">
-                                  {record.patient_name.charAt(0)}
-                                </div>
-                                <span className="font-medium text-gray-800">{record.patient_name}</span>
-                              </div>
-                            </td>
-                            <td className="py-3 px-2">
-                              <span className="inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium bg-purple-100 text-purple-800 capitalize">
-                                {record.record_type}
-                              </span>
-                            </td>
-                            <td className="py-3 px-2 text-gray-600">{record.record_date}</td>
-                            <td className="py-3 px-2 text-gray-600">
-                              {record.description || (
-                                <span className="text-gray-400 italic">No description</span>
-                              )}
-                            </td>
-                          </tr>
-                        ))}
-                      </tbody>
-                    </table>
-                  </div>
-                  
-                  {data.recent_records.length === 0 && (
-                    <div className="text-center py-8 text-gray-500">
-                      <svg className="w-12 h-12 mx-auto text-gray-300" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
-                        <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 12h6m-6 4h6m2 5H7a2 2 0 01-2-2V5a2 2 0 012-2h5.586a1 1 0 01.707.293l5.414 5.414a1 1 0 01.293.707V19a2 2 0 01-2 2z"></path>
-                      </svg>
-                      <p className="mt-2">No recent medical records</p>
-                    </div>
-                  )}
-                </section>
-              </div>
-            </div>
+  const handleNavigate = (path) => {
+    setCurrentPath(path);
+    navigate(path);
+  };
+
+  const handleLogout = async () => {
+    try {
+      navigate('/');
+    } catch (error) {
+      console.error('Logout failed:', error);
+    }
+  };
+
+  const stats = [
+    { 
+      title: "Total Appointments", 
+      value: data.stats.total_appointments, 
+      description: "All time appointments",
+      color: "from-blue-500 to-blue-600",
+      icon: Calendar
+    },
+    { 
+      title: "Patients Today", 
+      value: data.stats.patients_today, 
+      description: "Patients scheduled today",
+      color: "from-green-500 to-green-600",
+      icon: Users
+    },
+    { 
+      title: "Prescriptions Issued", 
+      value: data.stats.prescriptions_issued, 
+      description: "Total prescriptions",
+      color: "from-purple-500 to-purple-600",
+      icon: FileText
+    }
+  ];
+
+  if (loading) {
+    return (
+      <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} transition-colors duration-300`}>
+        <div className="flex">
+          <DoctorSidebar 
+            isOpen={sidebarOpen}
+            onClose={() => setSidebarOpen(false)}
+            currentPath={currentPath}
+            onNavigate={handleNavigate}
+            isDark={isDark}
+            onThemeToggle={() => setIsDark(!isDark)}
+          />
+          <div className="flex-1 flex items-center justify-center">
+            <div className="animate-spin rounded-full h-12 w-12 border-b-2 border-indigo-600"></div>
           </div>
         </div>
       </div>
-    </>
+    );
+  }
+
+  return (
+    <div className={`min-h-screen ${isDark ? 'bg-gray-900' : 'bg-gray-50'} transition-colors duration-300`}>
+      <div className="flex">
+        {/* Doctor Sidebar */}
+        <DoctorSidebar 
+          isOpen={sidebarOpen}
+          onClose={() => setSidebarOpen(false)}
+          currentPath={currentPath}
+          onNavigate={handleNavigate}
+          isDark={isDark}
+          onThemeToggle={() => setIsDark(!isDark)}
+        />
+
+        {/* Main Content Area */}
+        <div className="flex-1 flex flex-col min-w-0">
+          {/* Navbar */}
+          <header className={`${isDark ? 'bg-gray-800 border-gray-700' : 'bg-white border-gray-200'} border-b shadow-sm transition-colors duration-300`}>
+            <div className="flex items-center justify-between px-6 py-4">
+              <div className="flex items-center">
+                <button
+                  onClick={() => setSidebarOpen(!sidebarOpen)}
+                  className={`p-2 rounded-md ${isDark ? 'text-gray-300 hover:bg-gray-700' : 'text-gray-600 hover:bg-gray-100'} lg:hidden transition-colors duration-200`}
+                >
+                  <Menu size={24} />
+                </button>
+                <h1 className={`text-xl font-semibold ml-4 lg:ml-0 ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                  Doctor Dashboard
+                </h1>
+              </div>
+              
+              <div className="flex items-center space-x-4">
+                <button
+                  onClick={() => setIsDark(!isDark)}
+                  className={`p-2 rounded-lg ${isDark ? 'bg-gray-700 hover:bg-gray-600' : 'bg-gray-100 hover:bg-gray-200'} transition-colors duration-200`}
+                >
+                  {isDark ? '🌙' : '☀'}
+                </button>
+                <button
+                  onClick={handleLogout}
+                  className={`flex items-center space-x-2 px-4 py-2 rounded-lg ${
+                    isDark 
+                      ? 'bg-red-600 hover:bg-red-700 text-white' 
+                      : 'bg-red-100 hover:bg-red-200 text-red-700'
+                  } transition-colors duration-200`}
+                >
+                  <LogOut size={18} />
+                  <span>Logout</span>
+                </button>
+              </div>
+            </div>
+          </header>
+
+          {/* Main Content */}
+          <main className="flex-1 overflow-y-auto p-6">
+            {error && (
+              <div className={`mb-6 p-4 rounded-lg border-l-4 ${
+                isDark ? 'bg-red-900 border-red-700 text-red-200' : 'bg-red-100 border-red-500 text-red-700'
+              }`}>
+                {error}
+              </div>
+            )}
+            
+            {/* Welcome Section */}
+            <div className="mb-8">
+              <div className="rounded-2xl p-6 bg-gradient-to-r from-indigo-600 to-purple-700 text-white shadow-lg">
+                <div className="flex flex-col md:flex-row justify-between items-start md:items-center">
+                  <div>
+                    <h1 className="text-2xl md:text-3xl font-bold mb-2">
+                      Welcome back, Dr. {data.profile.name || 'Doctor'}!
+                    </h1>
+                    <p className="text-indigo-100 opacity-90">
+                      Here's your schedule and patient overview for today.
+                    </p>
+                  </div>
+                  <div className="mt-4 md:mt-0 px-4 py-2 rounded-full bg-white/20 backdrop-blur-sm">
+                    <p className="text-sm font-medium">
+                      {new Date().toLocaleDateString('en-US', { 
+                        weekday: 'long', 
+                        year: 'numeric', 
+                        month: 'long', 
+                        day: 'numeric' 
+                      })}
+                    </p>
+                  </div>
+                </div>
+              </div>
+            </div>
+
+            {/* Stats Overview */}
+            <div className="grid grid-cols-1 md:grid-cols-3 gap-6 mb-8">
+              {stats.map((stat, index) => {
+                const IconComponent = stat.icon;
+                return (
+                  <div key={stat.title} className={`rounded-2xl p-6 ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg border-l-4 border-indigo-500 transition-colors duration-300`}>
+                    <div className="flex items-center justify-between">
+                      <div>
+                        <p className={`text-sm font-medium ${isDark ? 'text-gray-400' : 'text-gray-600'}`}>
+                          {stat.title}
+                        </p>
+                        <p className="text-2xl font-bold mt-2 text-indigo-600">
+                          {stat.value}
+                        </p>
+                        <p className={`text-xs mt-1 ${isDark ? 'text-gray-500' : 'text-gray-600'}`}>
+                          {stat.description}
+                        </p>
+                      </div>
+                      <div className={`p-3 rounded-full ${isDark ? 'bg-indigo-900' : 'bg-indigo-100'}`}>
+                        <IconComponent size={24} className="text-indigo-600" />
+                      </div>
+                    </div>
+                  </div>
+                );
+              })}
+            </div>
+            
+            <div className="grid grid-cols-1 xl:grid-cols-2 gap-6">
+              {/* Upcoming Appointments */}
+              <section className={`rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg p-6 transition-colors duration-300`}>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className={`font-bold text-xl ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                    Upcoming Appointments
+                  </h2>
+                  <button 
+                    onClick={() => navigate('/doctor_appointments')}
+                    className={`text-sm font-medium ${
+                      isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-800'
+                    } transition-colors duration-200`}
+                  >
+                    View All
+                  </button>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Patient</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Date</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Time</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Actions</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.upcoming_appointments.map((apt, index) => (
+                        <tr key={apt.id} className={`border-b ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'} transition-colors duration-150`}>
+                          <td className="py-3 px-2">
+                            <div className="flex items-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium mr-3 ${
+                                isDark ? 'bg-indigo-600 text-white' : 'bg-indigo-100 text-indigo-600'
+                              }`}>
+                                {apt.patient_name?.charAt(0) || 'P'}
+                              </div>
+                              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                                {apt.patient_name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className={`py-3 px-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                            {apt.date}
+                          </td>
+                          <td className="py-3 px-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              isDark ? 'bg-indigo-900 text-indigo-200' : 'bg-indigo-100 text-indigo-800'
+                            }`}>
+                              {apt.time}
+                            </span>
+                          </td>
+                          <td className="py-3 px-2">
+                            <button 
+                              onClick={() => navigate(`/doctor_view_patient/${apt.patient_id}`)}
+                              className={`font-medium text-sm inline-flex items-center ${
+                                isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-800'
+                              } transition-colors duration-200`}
+                            >
+                              View
+                              <svg className="w-4 h-4 ml-1" fill="none" stroke="currentColor" viewBox="0 0 24 24" xmlns="http://www.w3.org/2000/svg">
+                                <path strokeLinecap="round" strokeLinejoin="round" strokeWidth="2" d="M9 5l7 7-7 7"></path>
+                              </svg>
+                            </button>
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {data.upcoming_appointments.length === 0 && (
+                  <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <Calendar size={48} className="mx-auto mb-4 opacity-50" />
+                    <p className="text-lg">No upcoming appointments</p>
+                    <p className="mt-2">Scheduled appointments will appear here</p>
+                  </div>
+                )}
+              </section>
+              
+              {/* Recent Medical Records */}
+              <section className={`rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg p-6 transition-colors duration-300`}>
+                <div className="flex justify-between items-center mb-6">
+                  <h2 className={`font-bold text-xl ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                    Recent Medical Records
+                  </h2>
+                  <button 
+                    onClick={() => navigate('/doctor_medical_records')}
+                    className={`text-sm font-medium ${
+                      isDark ? 'text-indigo-400 hover:text-indigo-300' : 'text-indigo-600 hover:text-indigo-800'
+                    } transition-colors duration-200`}
+                  >
+                    View All
+                  </button>
+                </div>
+                
+                <div className="overflow-x-auto">
+                  <table className="w-full">
+                    <thead>
+                      <tr className={`border-b ${isDark ? 'border-gray-700' : 'border-gray-200'}`}>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Patient</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Type</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Date</th>
+                        <th className="text-left py-3 px-2 text-sm font-medium text-gray-500 dark:text-gray-400">Description</th>
+                      </tr>
+                    </thead>
+                    <tbody>
+                      {data.recent_records.map((record, index) => (
+                        <tr key={record.id} className={`border-b ${isDark ? 'border-gray-700 hover:bg-gray-700' : 'border-gray-100 hover:bg-gray-50'} transition-colors duration-150`}>
+                          <td className="py-3 px-2">
+                            <div className="flex items-center">
+                              <div className={`w-8 h-8 rounded-full flex items-center justify-center font-medium mr-3 ${
+                                isDark ? 'bg-green-600 text-white' : 'bg-green-100 text-green-600'
+                              }`}>
+                                {record.patient_name?.charAt(0) || 'P'}
+                              </div>
+                              <span className={`font-medium ${isDark ? 'text-white' : 'text-gray-800'}`}>
+                                {record.patient_name}
+                              </span>
+                            </div>
+                          </td>
+                          <td className="py-3 px-2">
+                            <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${
+                              isDark ? 'bg-purple-900 text-purple-200' : 'bg-purple-100 text-purple-800'
+                            } capitalize`}>
+                              {record.record_type}
+                            </span>
+                          </td>
+                          <td className={`py-3 px-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                            {record.record_date}
+                          </td>
+                          <td className={`py-3 px-2 ${isDark ? 'text-gray-300' : 'text-gray-600'}`}>
+                            {record.description || (
+                              <span className={isDark ? 'text-gray-500 italic' : 'text-gray-400 italic'}>
+                                No description
+                              </span>
+                            )}
+                          </td>
+                        </tr>
+                      ))}
+                    </tbody>
+                  </table>
+                </div>
+                
+                {data.recent_records.length === 0 && (
+                  <div className={`text-center py-8 ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                    <FileText size={48} className="mx-auto mb-4 opacity-50" />
+                    <p className="text-lg">No recent medical records</p>
+                    <p className="mt-2">Patient records will appear here</p>
+                  </div>
+                )}
+              </section>
+            </div>
+          </main>
+        </div>
+      </div>
+    </div>
   );
 };
 
