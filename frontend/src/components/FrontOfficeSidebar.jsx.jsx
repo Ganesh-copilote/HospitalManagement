@@ -4,18 +4,17 @@ import { motion, AnimatePresence } from 'framer-motion';
 import { 
   LayoutDashboard, 
   Users, 
-  UserCheck, 
   Calendar,
   FileText,
   DollarSign,
   BarChart3, 
-  Settings,
   X,
   ChevronDown,
   ClipboardList,
-  CreditCard,
   UserPlus,
-  CheckCircle
+  CheckCircle,
+  FolderOpen,
+  Stethoscope
 } from 'lucide-react';
 
 const frontOfficeMenuItems = [
@@ -31,18 +30,24 @@ const frontOfficeMenuItems = [
   },
   { name: 'Appointments', icon: Calendar, path: '/front_office_appointments' },
   { name: 'Billing & Payments', icon: DollarSign, path: '/front_office_payments' },
-  // { name: 'Insurance Claims', icon: FileText, path: '/front_office_insurance' },
+  { 
+    name: 'Medical Records', 
+    icon: FolderOpen, 
+    children: [
+      { name: 'All Medical Records', icon: FolderOpen, path: '/get_all_medical_records' },
+      { name: 'Prescriptions', icon: ClipboardList, path: '/front_office_prescriptions' },
+    ]
+  },
   { name: 'Reports', icon: BarChart3, path: '/front_office_reports' },
-  // { name: 'Settings', icon: Settings, path: '/front_office_settings' },
 ];
 
-const FrontOfficeSidebar = ({ isOpen, onClose, isDark, onThemeToggle }) => {
+const FrontOfficeSidebar = ({ isOpen, onClose, isDark, onThemeToggle, currentPath, onNavigate }) => {
   const navigate = useNavigate();
   const location = useLocation();
-  const currentPath = location.pathname;
 
   const [expandedItems, setExpandedItems] = useState({
-    'Patient Management': true
+    'Patient Management': true,
+    'Medical Records': true
   });
 
   const toggleExpanded = (itemName) => {
@@ -54,22 +59,22 @@ const FrontOfficeSidebar = ({ isOpen, onClose, isDark, onThemeToggle }) => {
 
   const isItemActive = (item) => {
     if (item.children) {
-      return item.children.some(child => currentPath === child.path);
+      return item.children.some(child => location.pathname === child.path);
     }
-    return currentPath === item.path;
+    return location.pathname === item.path;
   };
 
   const handleItemClick = (item) => {
     if (item.children) {
       toggleExpanded(item.name);
     } else {
-      navigate(item.path);
+      onNavigate(item.path);
       if (window.innerWidth < 1024) onClose();
     }
   };
 
   const handleChildClick = (childPath) => {
-    navigate(childPath);
+    onNavigate(childPath);
     if (window.innerWidth < 1024) onClose();
   };
 
@@ -171,7 +176,7 @@ const FrontOfficeSidebar = ({ isOpen, onClose, isDark, onThemeToggle }) => {
                         >
                           {item.children.map((child) => {
                             const ChildIcon = child.icon;
-                            const isChildActive = currentPath === child.path;
+                            const isChildActive = location.pathname === child.path;
 
                             return (
                               <li key={child.name}>

@@ -38,6 +38,8 @@ import Medical from './pages/Medical';
 import Billing from './pages/Billing';
 import Settings from './pages/Settings';
 import Analytics from './pages/Analytics';
+import Prescriptions from './pages/Prescriptions';
+import FrontOfficeMedicalRecords from './pages/FrontOfficeMedicalRecords';
 
 
 function App() {
@@ -84,6 +86,8 @@ function App() {
         <Route path="/billing" element={<Billing />} />
         <Route path="/settings" element={<Settings />} />
         <Route path="/analytics" element={<Analytics />} />
+        <Route path="/front_office_prescriptions" element={<Prescriptions />} />
+        <Route path="/get_all_medical_records" element={<FrontOfficeMedicalRecords/>} />
       </Routes>
     </Router>
   );

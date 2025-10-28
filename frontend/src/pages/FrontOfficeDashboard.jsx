@@ -689,6 +689,7 @@ import FrontOfficeSidebar from '../components/FrontOfficeSidebar.jsx';
 import { Menu, LogOut, UserPlus, Users } from 'lucide-react';
 
 const FrontOfficeDashboard = () => {
+  debugger
   const [data, setData] = useState({
     front_office: {},
     scheduled_today: 0,
@@ -733,6 +734,7 @@ const FrontOfficeDashboard = () => {
   };
 
   useEffect(() => {
+    debugger
     const fetchData = async () => {
       try {
         setLoading(true);
@@ -835,9 +837,10 @@ const FrontOfficeDashboard = () => {
       color: "from-green-500 to-green-600",
       icon: UserPlus
     },
+    //data.todays_collections 
     { 
       title: "Today's Collections", 
-      value: `$${data.todays_collections || 0}`,
+      value: `$${0|| 0}`,
       description: "Total collections today",
       change: "+18%",
       changeType: "positive",

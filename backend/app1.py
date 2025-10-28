@@ -447,7 +447,233 @@ def view_medical_record(record_id):
     except Exception as e:
         logger.error(f"Error viewing medical record: {e}")
         return jsonify({'error': 'Failed to retrieve file'}), 500
-
+    
+# Get all medical records for front office
+# Get all medical records for front office - FIXED VERSION
+# Get all medical records for front office - USING SQLITE CONNECTION
+# Get all medical records for front office - COMPLETE DATA VERSION
+@app.route('/api/All_medical_records', methods=['GET'])
+def get_all_medical_records():
+    print("inside the get all front office medical records")
+    try:
+        user_id = session.get('family_id')
+        user_type = session.get('user_type')
+        print(user_id, user_type)
+        
+        if not user_id or user_type != 'front_office':
+            return jsonify({'error': 'Unauthorized access'}), 403
+        
+        conn = get_db()
+        c = conn.cursor()
+        
+        # Get ALL medical records with COMPLETE information
+        c.execute('''
+            SELECT 
+                mr.id,
+                mr.record_type,
+                mr.record_date,
+                mr.description,
+                mr.file_path,
+                mr.uploaded_date,
+                mr.member_id,
+                m.first_name,
+                m.last_name,
+                m.phone,
+                m.email,
+                m.age,
+                m.gender,
+                d.name as doctor_name,
+                d.specialty as doctor_specialty,
+                p.prescription_date,
+                p.medication
+            FROM medical_records mr
+            LEFT JOIN members m ON mr.member_id = m.id
+            LEFT JOIN prescriptions p ON p.member_id = m.id
+            LEFT JOIN doctors d ON p.doctor_id = d.id
+            ORDER BY mr.record_date DESC, mr.id DESC
+        ''')
+        
+        records = c.fetchall()
+        print(f"Found {len(records)} raw records")
+        
+        # Convert to list of dictionaries with ALL data
+        medical_records = []
+        for record in records:
+            record_dict = dict(record)
+            print(f"RAW RECORD DATA: {record_dict}")  # Debug print
+            
+            # Build patient name properly
+            first_name = record_dict.get('first_name', '')
+            last_name = record_dict.get('last_name', '')
+            patient_name = f"{first_name} {last_name}".strip()
+            if not patient_name:
+                patient_name = "Unknown Patient"
+            
+            # Build patient ID
+            patient_id = record_dict.get('member_id') or record_dict.get('patient_id')
+            patient_id_formatted = f"P{patient_id:03d}" if patient_id else 'N/A'
+            
+            # Build doctor info
+            doctor_name = record_dict.get('doctor_name', '')
+            doctor_specialty = record_dict.get('doctor_specialty', '')
+            doctor_display = f"Dr. {doctor_name}" if doctor_name else "Dr. Unknown"
+            if doctor_specialty:
+                doctor_display += f" ({doctor_specialty})"
+            
+            # Build diagnosis/description
+            description = record_dict.get('description', '')
+            diagnosis = description if description else 'No diagnosis provided'
+            
+            # Build complete record
+            formatted_record = {
+                'id': record_dict['id'],
+                'patientName': patient_name,
+                'patientId': patient_id_formatted,
+                'recordType': record_dict.get('record_type', 'General Record'),
+                'doctor': doctor_display,
+                'date': record_dict.get('record_date') or record_dict.get('uploaded_date') or 'No date',
+                'diagnosis': diagnosis,
+                'priority': 'medium',
+                'status': 'active',
+                'notes': description or 'No notes available',
+                'attachments': [],
+                
+                # Additional data for modal
+                'patientDetails': {
+                    'firstName': first_name,
+                    'lastName': last_name,
+                    'phone': record_dict.get('phone', 'N/A'),
+                    'email': record_dict.get('email', 'N/A'),
+                    'age': record_dict.get('age', 'N/A'),
+                    'gender': record_dict.get('gender', 'N/A')
+                },
+                'medicalDetails': {
+                    'recordType': record_dict.get('record_type', 'General Record'),
+                    'recordDate': record_dict.get('record_date', 'No date'),
+                    'uploadedDate': record_dict.get('uploaded_date', 'No date'),
+                    'description': description,
+                    'doctor': doctor_display,
+                    'medication': record_dict.get('medication', 'None'),
+                    'prescriptionDate': record_dict.get('prescription_date', 'No date')
+                }
+            }
+            
+            # Handle file attachments
+            if record_dict.get('file_path'):
+                file_name = os.path.basename(record_dict['file_path'])
+                formatted_record['attachments'].append(file_name)
+            
+            medical_records.append(formatted_record)
+            print(f"✅ Processed record: {formatted_record['patientName']} (ID: {formatted_record['patientId']})")
+        
+        conn.close()
+        
+        return jsonify({
+            'success': True,
+            'medical_records': medical_records,
+            'total_records': len(medical_records),
+            'message': f'Successfully fetched {len(medical_records)} medical records'
+        })
+        
+    except Exception as e:
+        print(f"❌ Error fetching medical records: {str(e)}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Failed to fetch medical records'}), 500
+    
+# Get all prescriptions for front office
+# Get all prescriptions for front office
+@app.route('/api/All_prescriptions', methods=['GET'])
+def get_all_prescriptions():
+    print("inside the get all front office prescriptions")
+    try:
+        user_id = session.get('family_id')
+        user_type = session.get('user_type')
+        print(user_id, user_type)
+        
+        if not user_id or user_type != 'front_office':
+            return jsonify({'error': 'Unauthorized access'}), 403
+        
+        # Get all prescriptions with patient and doctor information using SQLAlchemy
+        from sqlalchemy import text
+        
+        query = text('''
+            SELECT 
+                p.id,
+                p.prescription_date,
+                p.medication,
+                p.dosage,
+                p.frequency,
+                p.duration,
+                p.instructions,
+                p.notes,
+                m.first_name || ' ' || m.last_name as patient_name,
+                m.id as patient_id,
+                d.name as doctor_name,
+                'active' as status
+            FROM prescriptions p
+            JOIN members m ON p.member_id = m.id
+            JOIN doctors d ON p.doctor_id = d.id
+            ORDER BY p.prescription_date DESC
+        ''')
+        
+        print("Executing prescriptions query...")
+        # Use db.session.execute() for SQLAlchemy
+        prescriptions_data = db.session.execute(query).fetchall()
+        print(f"Found {len(prescriptions_data)} prescriptions")
+        
+        # Convert to frontend format
+        prescriptions = []
+        for prescription in prescriptions_data:
+            # print(f"Processing prescription: {dict(prescription)}")
+            
+            # Parse medications
+            medications = []
+            if prescription.medication:
+                # Split by comma if multiple medications are stored in one field
+                med_list = prescription.medication.split(',') if ',' in prescription.medication else [prescription.medication]
+                
+                for med in med_list:
+                    medications.append({
+                        'name': med.strip(),
+                        'dosage': prescription.dosage or 'As directed',
+                        'frequency': prescription.frequency or 'Once daily',
+                        'duration': prescription.duration or '7 days',
+                        'instructions': prescription.instructions or 'Take as prescribed'
+                    })
+            else:
+                # Add a default medication if none exists
+                medications.append({
+                    'name': 'Unknown Medication',
+                    'dosage': prescription.dosage or 'As directed',
+                    'frequency': prescription.frequency or 'Once daily',
+                    'duration': prescription.duration or '7 days',
+                    'instructions': prescription.instructions or 'Take as prescribed'
+                })
+            
+            prescriptions.append({
+                'id': prescription.id,
+                'patientName': prescription.patient_name or 'Unknown Patient',
+                'patientId': f"P{prescription.patient_id:03d}",
+                'doctor': f"Dr. {prescription.doctor_name}" if prescription.doctor_name else "Dr. Unknown",
+                'datePrescribed': prescription.prescription_date,
+                'medications': medications,
+                'status': prescription.status,
+                'refills': 0,  # You can add this to your database if needed
+                'pharmacy': 'City Pharmacy',  # Default pharmacy
+                'notes': prescription.notes or 'Complete the course as directed'
+            })
+        
+        return jsonify({
+            'success': True,
+            'prescriptions': prescriptions
+        })
+        
+    except Exception as e:
+        print(f"Error fetching prescriptions: {str(e)}")
+        import traceback
+        print(f"Full traceback: {traceback.format_exc()}")
+        return jsonify({'error': 'Failed to fetch prescriptions'}), 500
 
 @app.route('/logout', methods=['GET'])
 def logout():
@@ -733,11 +959,11 @@ def login():
     conn = get_db()
     c = conn.cursor()
 
-    # Temporary hardcoded credentials for testing
+    # Temporary hardcoded credentials for testing - USING ACTUAL CREDENTIALS
     TEMP_CREDENTIALS = {
-        'admin@familycareconnect.com': {'password': 'admin123', 'user_type': 'admin', 'id': 'admin_temp'},
-        'alice.smith@hospital.com': {'password': 'alice123', 'user_type': 'doctor', 'id': 'doctor_temp'},
-        'radha.kumar@hospital.com': {'password': 'radha123', 'user_type': 'front_office', 'id': 'front_office_temp'}
+        'admin@familycareconnect.com': {'password': 'admin123', 'user_type': 'admin', 'id': 'ADMIN001'},
+        'alice.smith@hospital.com': {'password': 'alice123', 'user_type': 'doctor', 'id': 'DOC001'},
+        'radha.kumar@hospital.com': {'password': 'radha123', 'user_type': 'front_office', 'id': 'OFC111'}
     }
 
     # Check temporary credentials first
@@ -746,6 +972,8 @@ def login():
         if password == temp_user['password']:
             session['user_type'] = temp_user['user_type']
             session['family_id'] = temp_user['id']
+            print(session['user_type'])
+            print(session['family_id'])
             conn.close()
             print(f"Temporary login successful as {temp_user['user_type']}")
             return jsonify({
@@ -2778,10 +3006,11 @@ def api_doctor_dashboard():
 
 @app.route('/api/front_office_dashboard', methods=['GET'])
 def api_front_office_dashboard():
+    print("inside the frontoffice dashboard")
     if 'family_id' not in session or session.get('user_type') != 'front_office':
         return jsonify({'error': 'Unauthorized'}), 401
     print(session.get('family_id'))
-
+    print(session.get('user_type'))
     try:
         uid = session['family_id']
         conn = get_db()
@@ -2860,6 +3089,7 @@ def api_front_office_dashboard():
                 'registration_date': patient['created_date'][:10] if patient['created_date'] else 'N/A',
                 'status': 'Active'
             })
+            
 
         conn.close()
         front_office_dict = dict(front_office) if front_office else {}
@@ -3675,6 +3905,7 @@ def api_patient_medical_records():
     except Exception as e:
         logger.error(f"Error in patient medical records API: {e}")
         return jsonify({'error': 'Failed to process request'}), 500
+    
 @app.route('/api/doctor_medical_records', methods=['GET'])
 def api_doctor_medical_records():
     if 'family_id' not in session or session.get('user_type') != 'doctor':

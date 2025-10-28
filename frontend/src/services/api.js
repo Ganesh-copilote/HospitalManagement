@@ -337,6 +337,7 @@ export const getDoctorAppointments = async () => {
 };
 
 export const getDoctorMedicalRecords = async () => {
+  debugger
   try {
     console.log('🔄 Frontend: Calling GET /api/doctor_medical_records...');
     const response = await api.get('/api/doctor_medical_records');
@@ -348,6 +349,20 @@ export const getDoctorMedicalRecords = async () => {
     throw handleError(error);
   }
 };
+export const getAllMedicalRecords = async () => {
+  debugger
+  try {
+    console.log('🔄 Frontend: Calling GET /api/get All_medical_records...');
+    const response = await api.get('/api/All_medical_records');
+    console.log('✅ Frontend: Doctor medical records response:', response);
+    console.log('✅ Frontend: Response data:', response.data);
+    return response.data;
+  } catch (error) {
+    console.error('❌ Frontend: Doctor medical records API call failed:', error);
+    throw handleError(error);
+  }
+};
+
 
 // View medical record file
 export const viewMedicalRecord = async (recordId) => {
@@ -373,6 +388,15 @@ export const getDoctorPatients = async () => {
 export const getDoctorPrescriptions = async () => {
   try {
     const res = await api.get('/api/doctor_prescriptions');
+    return res.data;
+  } catch (error) {
+    throw handleError(error);
+  }
+};
+
+export const getAllPrescriptions = async () => {
+  try {
+    const res = await api.get('/api/All_prescriptions');
     return res.data;
   } catch (error) {
     throw handleError(error);
@@ -416,6 +440,7 @@ export const addPrescription = async (data) => {
 };
 
 export const getFrontOfficeDashboardData = async () => {
+  debugger
   try {
     const res = await api.get('/api/front_office_dashboard');
     return res.data;
