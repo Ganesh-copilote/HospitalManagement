@@ -1,0 +1,23 @@
+# Python cache
+__pycache__/
+*.pyc
+
+# Virtual environment
+venv/
+
+# Environment files
+.env
+backend/.env
+
+# Editor settings
+.vscode/
+
+# Uploads (optional)
+# backend/uploads/
+
+# Database (optional, uncomment if you don't want to upload it)
+# *.db
+
+# OS junk files
+.DS_Store
+Thumbs.db
