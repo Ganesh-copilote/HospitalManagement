@@ -32,7 +32,7 @@ app.config['UPLOAD_FOLDER'] = os.path.join(os.path.dirname(os.path.abspath(__fil
 app.config['MAX_CONTENT_LENGTH'] = 16 * 1024 * 1024  # 16MB max file size
 
 # app.config['SQLALCHEMY_DATABASE_URI'] = f'sqlite:///{DATABASE}'
-DATABASE = r'C:\Users\ADMIN\Documents\Truvisory\SMB (3)\SMB\hospital1.db'
+DATABASE = r'C:\Users\ADMIN\Documents\Truvisory\SMB (3)\SMB\backend\hospital1.db'
 
 # ✅ Session + CORS configuration for React localhost
 # app.config['SESSION_COOKIE_DOMAIN'] = None
