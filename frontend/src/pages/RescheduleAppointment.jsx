@@ -38,34 +38,33 @@ const RescheduleAppointment = () => {
   };
 
   // Fetch initial data and current appointment details
-  useEffect(() => {
-    const fetchData = async () => {
-      try {
-        setLoading(true);
-        setError('');
+  // In your initial data fetch useEffect, after setting the form data:
+useEffect(() => {
+  const fetchData = async () => {
+    try {
+      setLoading(true);
+      setError('');
+      
+      console.log(`📋 Fetching data for rescheduling appointment ${id}...`);
+      
+      // Fetch current appointment details
+      const rescheduleData = await getRescheduleAppointment(id);
+      if (rescheduleData.success && rescheduleData.appointment) {
+        console.log('✅ Current appointment data:', rescheduleData.appointment);
+        setCurrentAppointment(rescheduleData.appointment);
         
-        console.log(`📋 Fetching data for rescheduling appointment ${id}...`);
+        // Pre-fill form with current appointment data
+        const appointmentDate = rescheduleData.appointment.slot_date;
+        const today = getTodayDate();
         
-        // Fetch current appointment details
-        const rescheduleData = await getRescheduleAppointment(id);
-        if (rescheduleData.success && rescheduleData.appointment) {
-          console.log('✅ Current appointment data:', rescheduleData.appointment);
-          setCurrentAppointment(rescheduleData.appointment);
-          
-          // Pre-fill form with current appointment data, but only if it's today or future
-          const appointmentDate = rescheduleData.appointment.slot_date;
-          const today = getTodayDate();
-          
-          setFormData(prev => ({
-            ...prev,
-            member_id: rescheduleData.appointment.member_id,
-            doctor_id: rescheduleData.appointment.doctor_id,
-            appointment_date: appointmentDate >= today ? appointmentDate : today,
-            appointment_id: id
-          }));
-        } else {
-          throw new Error(rescheduleData.error || 'Failed to load appointment details');
-        }
+        const newFormData = {
+          member_id: rescheduleData.appointment.member_id,
+          doctor_id: rescheduleData.appointment.doctor_id,
+          appointment_date: appointmentDate >= today ? appointmentDate : today,
+          appointment_id: id
+        };
+        
+        setFormData(newFormData);
 
         // Fetch available data for booking
         const bookingData = await getBookAppointmentData();
@@ -80,23 +79,49 @@ const RescheduleAppointment = () => {
           available_slots: []
         });
 
-      } catch (err) {
-        console.error('❌ Error fetching data:', err);
-        setError(err.message || 'Failed to load appointment data');
-      } finally {
-        setLoading(false);
-        setInitialLoadComplete(true);
+        // MANUALLY FETCH SLOTS FOR PRE-SELECTED DATE
+        if (newFormData.doctor_id && newFormData.appointment_date && !isPastDate(newFormData.appointment_date)) {
+          try {
+            const slots = await getAvailableSlots(newFormData.doctor_id, newFormData.appointment_date);
+            const currentTime = new Date();
+            const futureSlots = slots.filter(slot => {
+              if (slot.slot_time) {
+                const slotDateTime = new Date(slot.slot_time);
+                return slotDateTime > currentTime;
+              }
+              return true;
+            });
+            
+            setData(prev => ({
+              ...prev,
+              available_slots: futureSlots
+            }));
+          } catch (slotErr) {
+            console.error('❌ Failed to load initial slots:', slotErr);
+          }
+        }
+
+      } else {
+        throw new Error(rescheduleData.error || 'Failed to load appointment details');
       }
-    };
-    
-    if (id) {
-      fetchData();
-    } else {
-      setError('No appointment ID provided');
+
+    } catch (err) {
+      console.error('❌ Error fetching data:', err);
+      setError(err.message || 'Failed to load appointment data');
+    } finally {
       setLoading(false);
       setInitialLoadComplete(true);
     }
-  }, [id]);
+  };
+  
+  if (id) {
+    fetchData();
+  } else {
+    setError('No appointment ID provided');
+    setLoading(false);
+    setInitialLoadComplete(true);
+  }
+}, [id]);
 
   // Fetch available slots when doctor or date changes OR after initial load
   useEffect(() => {

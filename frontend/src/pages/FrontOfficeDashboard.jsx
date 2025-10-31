@@ -840,7 +840,7 @@ const FrontOfficeDashboard = () => {
     //data.todays_collections 
     { 
       title: "Today's Collections", 
-      value: `$${0|| 0}`,
+      value: `$${data.todays_collections || 0}`, // NEW - uses actual API data
       description: "Total collections today",
       change: "+18%",
       changeType: "positive",

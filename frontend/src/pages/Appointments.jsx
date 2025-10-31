@@ -980,7 +980,7 @@ const handleDelete = async (itemId) => {
                                   {item.date}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap text-sm">
-                                  {item.start_time} - {item.end_time}
+                                  {item.start_time} {item.end_time}
                                 </td>
                                 <td className="px-6 py-4 whitespace-nowrap">
                                   <span className={`inline-flex items-center px-2.5 py-0.5 rounded-full text-xs font-medium ${

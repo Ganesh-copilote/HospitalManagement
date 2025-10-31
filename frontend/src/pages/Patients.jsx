@@ -265,114 +265,125 @@ const Patients = () => {
             )}
 
             {/* Patients Table */}
-            {!loading && (
-              <div className={`rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg transition-colors duration-300 overflow-hidden`}>
-                <div className="overflow-x-auto">
-                  <table className="min-w-full">
-                    <thead>
-                      <tr className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Family ID</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Patient Name</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Age</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Gender</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Email</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Phone</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Aadhar</th>
-                        <th className="px-6 py-4 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
-                      </tr>
-                    </thead>
-                    <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
-                      {filteredPatients.length > 0 ? (
-                        filteredPatients.map((patient, index) => (
-                          <motion.tr
-                            key={patient.id}
-                            initial={{ opacity: 0 }}
-                            animate={{ opacity: 1 }}
-                            transition={{ delay: index * 0.05 }}
-                            whileHover={{ 
-                              backgroundColor: isDark ? 'rgba(55, 65, 81, 0.5)' : 'rgba(243, 244, 246, 0.5)'
-                            }}
-                            className="transition-colors duration-200"
-                          >
-                            <td className="px-6 py-4 whitespace-nowrap text-sm font-medium">
-                              {patient.patient_id || `PAT${patient.id}`}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap">
-                              <div className="flex items-center">
-                                <div className={`w-8 h-8 rounded-full flex items-center justify-center ${
-                                  isDark ? 'bg-blue-600' : 'bg-blue-100'
-                                }`}>
-                                  <Users size={16} className={isDark ? 'text-white' : 'text-blue-600'} />
-                                </div>
-                                <div className="ml-4">
-                                  <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
-                                    {patient.name}
-                                  </div>
-                                  <div className={`text-sm ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                                    {patient.address || 'No address'}
-                                  </div>
-                                </div>
-                              </div>
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {patient.age || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {patient.gender || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {patient.email || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {patient.phone || 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              {patient.aadhar ? `${patient.aadhar.substring(0, 4)}****${patient.aadhar.substring(12)}` : 'N/A'}
-                            </td>
-                            <td className="px-6 py-4 whitespace-nowrap text-sm">
-                              <div className="flex space-x-2">
-                                <motion.button
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={() => handleEdit(patient)}
-                                  className={`p-2 rounded ${
-                                    isDark ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-100 hover:bg-blue-200'
-                                  } transition-colors duration-200`}
-                                >
-                                  <Edit size={16} className={isDark ? 'text-white' : 'text-blue-600'} />
-                                </motion.button>
-                                <motion.button
-                                  whileHover={{ scale: 1.1 }}
-                                  whileTap={{ scale: 0.9 }}
-                                  onClick={() => handleDelete(patient.id)}
-                                  className={`p-2 rounded ${
-                                    isDark ? 'bg-red-600 hover:bg-red-700' : 'bg-red-100 hover:bg-red-200'
-                                  } transition-colors duration-200`}
-                                >
-                                  <Trash2 size={16} className={isDark ? 'text-white' : 'text-red-600'} />
-                                </motion.button>
-                              </div>
-                            </td>
-                          </motion.tr>
-                        ))
-                      ) : (
-                        <tr>
-                          <td colSpan="8" className="px-6 py-8 text-center">
-                            <div className={`flex flex-col items-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
-                              <Users size={48} className="mb-4 opacity-50" />
-                              <p className="text-lg">No patients found</p>
-                              <p className="mt-2">
-                                {searchTerm ? 'Try adjusting your search terms' : 'Add your first patient to get started'}
-                              </p>
-                            </div>
-                          </td>
-                        </tr>
-                      )}
-                    </tbody>
-                  </table>
+            {/* Patients Table */}
+{!loading && (
+  <div className={`rounded-2xl ${isDark ? 'bg-gray-800' : 'bg-white'} shadow-lg transition-colors duration-300 overflow-hidden`}>
+    <div className="overflow-x-auto">
+      <table className="w-full">
+        <thead>
+          <tr className={`${isDark ? 'bg-gray-700' : 'bg-gray-50'}`}>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Family ID</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Patient Name</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Age</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Gender</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Email</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Phone</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Aadhar</th>
+            <th className="px-4 py-3 text-left text-xs font-medium uppercase tracking-wider">Actions</th>
+          </tr>
+        </thead>
+        <tbody className="divide-y divide-gray-200 dark:divide-gray-700">
+          {filteredPatients.length > 0 ? (
+            filteredPatients.map((patient, index) => (
+              <motion.tr
+                key={patient.id}
+                initial={{ opacity: 0 }}
+                animate={{ opacity: 1 }}
+                transition={{ delay: index * 0.05 }}
+                className="transition-colors duration-200"
+              >
+                {/* Family ID */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm font-medium">
+                  {patient.patient_id || `PAT${patient.id}`}
+                </td>
+                
+                {/* Patient Name - SIMPLIFIED VERSION */}
+                <td className="px-4 py-3 whitespace-nowrap">
+                  <div className="flex items-center">
+                    <div className={`flex-shrink-0 w-8 h-8 rounded-full flex items-center justify-center ${
+                      isDark ? 'bg-blue-600' : 'bg-blue-100'
+                    }`}>
+                      <Users size={16} className={isDark ? 'text-white' : 'text-blue-600'} />
+                    </div>
+                    <div className="ml-3">
+                      <div className={`text-sm font-medium ${isDark ? 'text-white' : 'text-gray-900'}`}>
+                        {patient.name}
+                      </div>
+                    </div>
+                  </div>
+                </td>
+                
+                {/* Age */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                  {patient.age || 'N/A'}
+                </td>
+                
+                {/* Gender */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                  {patient.gender || 'N/A'}
+                </td>
+                
+                {/* Email */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                  {patient.email || 'N/A'}
+                </td>
+                
+                {/* Phone */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                  {patient.phone || 'N/A'}
+                </td>
+                
+                {/* Aadhar */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                  {/* {patient.aadhar ? `${patient.aadhar.substring(0, 4)}****${patient.aadhar.substring(12)}` : 'N/A'} */}
+                  {patient.aadhar || 'N/A'}
+                </td>
+                
+                {/* Actions */}
+                <td className="px-4 py-3 whitespace-nowrap text-sm">
+                  <div className="flex space-x-2">
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleEdit(patient)}
+                      className={`p-2 rounded ${
+                        isDark ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-100 hover:bg-blue-200'
+                      } transition-colors duration-200`}
+                    >
+                      <Edit size={16} className={isDark ? 'text-white' : 'text-blue-600'} />
+                    </motion.button>
+                    <motion.button
+                      whileHover={{ scale: 1.1 }}
+                      whileTap={{ scale: 0.9 }}
+                      onClick={() => handleDelete(patient.id)}
+                      className={`p-2 rounded ${
+                        isDark ? 'bg-red-600 hover:bg-red-700' : 'bg-red-100 hover:bg-red-200'
+                      } transition-colors duration-200`}
+                    >
+                      <Trash2 size={16} className={isDark ? 'text-white' : 'text-red-600'} />
+                    </motion.button>
+                  </div>
+                </td>
+              </motion.tr>
+            ))
+          ) : (
+            <tr>
+              <td colSpan="8" className="px-6 py-8 text-center">
+                <div className={`flex flex-col items-center ${isDark ? 'text-gray-400' : 'text-gray-500'}`}>
+                  <Users size={48} className="mb-4 opacity-50" />
+                  <p className="text-lg">No patients found</p>
+                  <p className="mt-2">
+                    {searchTerm ? 'Try adjusting your search terms' : 'Add your first patient to get started'}
+                  </p>
                 </div>
-              </div>
-            )}
+              </td>
+            </tr>
+          )}
+        </tbody>
+      </table>
+    </div>
+  </div>
+)}
 
             {/* Add/Edit Patient Modal */}
             {/* // Update the modal usage */}

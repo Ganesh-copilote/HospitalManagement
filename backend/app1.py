@@ -54,36 +54,79 @@ def add_cors_headers(response):
     return response
 
 
+# def generate_slots_for_doctor(doctor_id, days):
+#     print("calling generate_slots_for_doctor")
+#     from datetime import datetime, timedelta
+
+#     slots = []
+#     start_date = datetime.now().date()
+
+#     for i in range(days):
+#         current_date = start_date + timedelta(days=i)
+#         day_of_week = current_date.weekday()  # 0=Mon, 6=Sun
+
+#         if day_of_week < 5:  # Weekdays
+#             hours = list(range(10, 13)) + list(range(14, 18))
+#         else:  # Weekends
+#             hours = list(range(10, 13))
+
+#         for hour in hours:
+#             for minute in [0, 30]:
+#                 slot_time = datetime.combine(current_date, datetime.min.time()).replace(
+#                     hour=hour, minute=minute, second=0
+#                 )
+#                 slots.append(Slot(
+#                     doctor_id=doctor_id,
+#                     slot_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
+#                     booked=0
+#                 ))
+
+#     db.session.add_all(slots)
+#     db.session.commit()
+#     print(f"✅ Inserted {len(slots)} slots for doctor {doctor_id}")
+
+
 def generate_slots_for_doctor(doctor_id, days):
     print("calling generate_slots_for_doctor")
     from datetime import datetime, timedelta
+    from sqlalchemy import and_
 
-    slots = []
     start_date = datetime.now().date()
+    new_slots = []
 
     for i in range(days):
         current_date = start_date + timedelta(days=i)
         day_of_week = current_date.weekday()  # 0=Mon, 6=Sun
 
-        if day_of_week < 5:  # Weekdays
-            hours = list(range(10, 13)) + list(range(14, 18))
-        else:  # Weekends
-            hours = list(range(10, 13))
+        # Weekdays: 10-12, 14-17 | Weekends: 10-12
+        hours = list(range(10, 13)) + (list(range(14, 18)) if day_of_week < 5 else [])
 
         for hour in hours:
             for minute in [0, 30]:
                 slot_time = datetime.combine(current_date, datetime.min.time()).replace(
                     hour=hour, minute=minute, second=0
                 )
-                slots.append(Slot(
-                    doctor_id=doctor_id,
-                    slot_time=slot_time.strftime("%Y-%m-%d %H:%M:%S"),
-                    booked=0
-                ))
+                slot_str = slot_time.strftime("%Y-%m-%d %H:%M:%S")
 
-    db.session.add_all(slots)
-    db.session.commit()
-    print(f"✅ Inserted {len(slots)} slots for doctor {doctor_id}")
+                # ✅ Check if slot already exists
+                existing = Slot.query.filter(
+                    and_(Slot.doctor_id == doctor_id, Slot.slot_time == slot_str)
+                ).first()
+
+                if not existing:  # Only add if not already present
+                    new_slots.append(Slot(
+                        doctor_id=doctor_id,
+                        slot_time=slot_str,
+                        booked=0
+                    ))
+
+    # ✅ Add only new slots
+    if new_slots:
+        db.session.add_all(new_slots)
+        db.session.commit()
+        print(f"✅ Inserted {len(new_slots)} new slots for doctor {doctor_id}")
+    else:
+        print(f"⚠️ No new slots added — all already exist for doctor {doctor_id}")
 
 
 def generate_slots_for_doctor_for_admin(doctor_id, days, conn=None):
@@ -879,9 +922,14 @@ def api_front_office_register():
         last_name  = data.get('last_name', '').strip()
         phone      = data.get('phone', '').strip()
         email      = data.get('email', '').strip()
+        password   = data.get('password', '').strip()  # Added password field
 
-        if not first_name or not last_name or not phone:
-            return jsonify({'success': False, 'error': 'first_name, last_name and phone are required'}), 400
+        if not first_name or not last_name or not phone or not password:
+            return jsonify({'success': False, 'error': 'first_name, last_name, phone and password are required'}), 400
+
+        # Password strength validation
+        if len(password) < 6:
+            return jsonify({'success': False, 'error': 'Password must be at least 6 characters long'}), 400
 
         # Check duplicate phone
         c.execute('SELECT id FROM members WHERE phone = ?', (phone,))
@@ -915,20 +963,35 @@ def api_front_office_register():
         prev_problem = data.get('prev_problem', '').strip()
         curr_problem = data.get('curr_problem', '').strip()
 
-        # Insert member (no password for front office registrations)
+        # Hash the password before storing
+        hashed_password = generate_password_hash(password)
+
+        # Insert member with password
         c.execute('''INSERT INTO members
-            (family_id, first_name, middle_name, last_name, age, gender, phone, email, aadhar, address, prev_problem, curr_problem, created_date)
-            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))''',
-            (uid, first_name, middle_name, last_name, age, gender, phone, email, aadhar, address, prev_problem, curr_problem)
+            (family_id, first_name, middle_name, last_name, age, gender, phone, email, password_hash, aadhar, address, prev_problem, curr_problem, created_date)
+            VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, datetime('now'))''',
+            (uid, first_name, middle_name, last_name, age, gender, phone, email, hashed_password, aadhar, address, prev_problem, curr_problem)
         )
         
+        member_id = c.lastrowid
         conn.commit()
+
+        # ✅ Use existing email function - send_family_member_credentials
+        if email:
+            try:
+                user_name = f"{first_name} {last_name}"
+                send_family_member_credentials(email, user_name, email, password)
+            except Exception as email_error:
+                # Log the email error but don't fail the registration
+                logger.error(f"Failed to send email to {email}: {email_error}")
+                print(f"Email sending failed but patient registered: {email_error}")
 
         return jsonify({
             'success': True, 
             'message': 'Patient registered successfully',
             'family_id': uid,
-            'patient_name': f"{first_name} {last_name}"
+            'patient_name': f"{first_name} {last_name}",
+            'member_id': member_id
         })
 
     except Exception as e:
@@ -2049,6 +2112,9 @@ def admin_add_user():
                 ))
                 user_id = c.lastrowid
                 generate_slots_for_doctor_for_admin(doctor_id=user_id,days=7,conn=conn)
+                # generate_slots_for_doctor_for_admin(doctor_id=1,days=7,conn=conn)
+                # generate_slots_for_doctor_for_admin(doctor_id=2,days=7,conn=conn)
+                # generate_slots_for_doctor_for_admin(doctor_id=3,days=7,conn=conn)
                 
             elif user_type == 'frontoffice':
                 # Validate required fields for front office
@@ -2906,6 +2972,113 @@ def send_admin_created_credentials(recipient_email, name, user_type, username, p
     logger.info(f"Credentials email sent to {recipient_email} for {user_type_display} account")
 
 
+def send_family_member_credentials(recipient_email, name, username, password):
+    """Send email with login credentials for newly added family members"""
+    
+    # Create message
+    subject = "Your Family Member Account Has Been Created"
+    
+    # HTML email content
+    html = f"""
+    <html>
+        <body>
+            <h2>Welcome to Our Healthcare System, {name}!</h2>
+            <p>Your family member account has been successfully added to the healthcare system.</p>
+            <p>Here are your login details:</p>
+            <table style="border-collapse: collapse; width: 100%; max-width: 500px; margin: 20px 0;">
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background-color: #f8f9fa; font-weight: bold; width: 40%;">Username/Email:</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{username}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background-color: #f8f9fa; font-weight: bold;">Password:</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">{password}</td>
+                </tr>
+                <tr>
+                    <td style="padding: 12px; border: 1px solid #ddd; background-color: #f8f9fa; font-weight: bold;">Account Type:</td>
+                    <td style="padding: 12px; border: 1px solid #ddd;">Family Member</td>
+                </tr>
+            </table>
+            
+            <div style="background-color: #fff3cd; border: 1px solid #ffeaa7; border-radius: 5px; padding: 15px; margin: 20px 0;">
+                <strong>⚠️ Security Notice:</strong> 
+                <ul style="margin: 10px 0; padding-left: 20px;">
+                    <li>Please change your password after first login for security</li>
+                    <li>Keep your login credentials secure and confidential</li>
+                    <li>Do not share your password with anyone</li>
+                </ul>
+            </div>
+            
+            <p>You can access the system at: <a href="{request.host_url}login">{request.host_url}login</a></p>
+            
+            <p>As a family member, you can:</p>
+            <ul style="margin: 10px 0; padding-left: 20px;">
+                <li>View your medical records</li>
+                <li>Book appointments with doctors</li>
+                <li>Access your health information</li>
+                <li>Manage your profile</li>
+            </ul>
+            
+            <p>If you have any questions or need assistance, please contact the system administrator.</p>
+            
+            <br>
+            <p>Best regards,<br>Healthcare System Administration</p>
+        </body>
+    </html>
+    """
+    
+    # Plain text version
+    text = f"""
+    Welcome to Our Healthcare System, {name}!
+
+    Your family member account has been successfully added to the healthcare system.
+
+    Here are your login details:
+    Username/Email: {username}
+    Password: {password}
+    Account Type: Family Member
+
+    Security Notice:
+    - Please change your password after first login for security
+    - Keep your login credentials secure and confidential
+    - Do not share your password with anyone
+
+    You can access the system at: {request.host_url}login
+
+    As a family member, you can:
+    - View your medical records
+    - Book appointments with doctors  
+    - Access your health information
+    - Manage your profile
+
+    If you have any questions or need assistance, please contact the system administrator.
+
+    Best regards,
+    Healthcare System Administration
+    """
+    
+    # Create message container
+    msg = MIMEMultipart('alternative')
+    msg['Subject'] = subject
+    msg['From'] = MAIL_FROM
+    msg['To'] = recipient_email
+    
+    # Attach both HTML and plain text versions
+    part1 = MIMEText(text, 'plain')
+    part2 = MIMEText(html, 'html')
+    
+    msg.attach(part1)
+    msg.attach(part2)
+    
+    # Send email
+    with smtplib.SMTP(MAIL_SERVER, MAIL_PORT) as server:
+        server.starttls()
+        server.login(MAIL_USERNAME, MAIL_PASSWORD)
+        server.send_message(msg)
+    
+    logger.info(f"Family member credentials email sent to {recipient_email}")
+
+
 @app.route('/api/doctor_dashboard')
 def api_doctor_dashboard():
     print(session.get('user_type'),session.get('family_id'))
@@ -2972,13 +3145,19 @@ def api_doctor_dashboard():
         } for row in c.fetchall()]
         print("Upcoming appointments:", upcoming_appointments)
 
-        # Recent medical records
-        c.execute('''SELECT r.id, m.id as patient_id, m.first_name || ' ' || m.last_name as patient_name,
-                            r.record_type, r.record_date, r.description
-                     FROM medical_records r
-                     JOIN members m ON r.member_id = m.id
-                     WHERE r.member_id = ?
-                     ORDER BY r.record_date DESC
+        # Recent medical records - FIXED QUERY
+        # Get records for patients who have appointments with this doctor
+        c.execute('''SELECT DISTINCT mr.id, m.id as patient_id, m.first_name || ' ' || m.last_name as patient_name,
+                            mr.record_type, mr.record_date, mr.description
+                     FROM medical_records mr
+                     JOIN members m ON mr.member_id = m.id
+                     WHERE mr.member_id IN (
+                         SELECT DISTINCT a.member_id 
+                         FROM appointments a 
+                         JOIN slots s ON a.slot_id = s.id 
+                         WHERE s.doctor_id = ?
+                     )
+                     ORDER BY mr.record_date DESC, mr.uploaded_date DESC
                      LIMIT 5''', (doctor['id'],))
         recent_records = [dict(row) for row in c.fetchall()]
         print("Recent medical records:", recent_records)
@@ -3003,7 +3182,6 @@ def api_doctor_dashboard():
         print("Error in /api/doctor_dashboard:", str(e))
         return jsonify({'error': str(e)}), 500
 
-
 @app.route('/api/front_office_dashboard', methods=['GET'])
 def api_front_office_dashboard():
     print("inside the frontoffice dashboard")
@@ -3023,7 +3201,8 @@ def api_front_office_dashboard():
             return jsonify({'error': 'Front office staff not found'}), 404
 
         from datetime import datetime
-        target_date = datetime.now().strftime('%Y-%m-%d')
+        today = datetime.now().strftime('%Y-%m-%d')
+        target_date = today
 
         # Dashboard stats
         c.execute('''SELECT COUNT(*) as scheduled_today
@@ -3034,8 +3213,22 @@ def api_front_office_dashboard():
 
         pending_checkins = scheduled_today
         total_patients_today = scheduled_today
-        todays_collections = 2450.00 if scheduled_today > 0 else 0
-        pending_payments = 1250.00 if scheduled_today > 0 else 0
+        
+        # Calculate TODAY'S COLLECTIONS based on payment_date
+        c.execute('''SELECT COALESCE(SUM(amount), 0) as todays_collections
+                     FROM bills 
+                     WHERE status = 'Paid' 
+                     AND date(payment_date) = ?''', (today,))
+        todays_collections_result = c.fetchone()
+        todays_collections = float(todays_collections_result['todays_collections']) if todays_collections_result['todays_collections'] else 0.0
+        
+        # Pending payments (bills with status other than 'Paid')
+        c.execute('''SELECT COALESCE(SUM(amount), 0) as pending_payments
+                     FROM bills 
+                     WHERE status != 'Paid' OR status IS NULL''')
+        pending_payments_result = c.fetchone()
+        pending_payments = float(pending_payments_result['pending_payments']) if pending_payments_result['pending_payments'] else 0.0
+        
         insurance_claims = 5 if scheduled_today > 0 else 0
 
         # Appointments
@@ -3090,6 +3283,10 @@ def api_front_office_dashboard():
                 'status': 'Active'
             })
             
+        # Debug information to verify the calculation
+        print(f"Today's date: {today}")
+        print(f"Today's collections calculated: ${todays_collections}")
+        print(f"Pending payments: ${pending_payments}")
 
         conn.close()
         front_office_dict = dict(front_office) if front_office else {}
@@ -3112,6 +3309,7 @@ def api_front_office_dashboard():
     except Exception as e:
         import traceback
         return jsonify({'error': str(e), 'trace': traceback.format_exc()}), 500
+    
 @app.route('/api/add_family_member', methods=['POST'])
 def api_add_family_member():
     # Check if user is logged in and is a patient
@@ -3131,14 +3329,19 @@ def api_add_family_member():
         gender = data.get('gender', '').strip()
         phone = data.get('phone', '').strip()
         email = data.get('email', '').strip()
+        password = data.get('password', '').strip()  # Password from frontend
         aadhar = data.get('aadhar', '').strip()
         address = data.get('address', '').strip()
         prev_problem = data.get('prev_problem', '').strip()
         curr_problem = data.get('curr_problem', '').strip()
 
         # Basic validation
-        if not first_name or not last_name or not phone:
-            return jsonify({'success': False, 'error': 'first_name, last_name, phone are required'}), 400
+        if not first_name or not last_name or not phone or not password:
+            return jsonify({'success': False, 'error': 'first_name, last_name, phone, and password are required'}), 400
+
+        # Password strength validation (optional)
+        if len(password) < 6:
+            return jsonify({'success': False, 'error': 'Password must be at least 6 characters long'}), 400
 
         conn = get_db()
         c = conn.cursor()
@@ -3149,13 +3352,27 @@ def api_add_family_member():
             if c.fetchone():
                 return jsonify({'success': False, 'error': 'Email already exists'}), 400
 
-        # Insert into members table
+        # Hash the password before storing
+        hashed_password = generate_password_hash(password)
+
+        # Insert into members table with password
         c.execute('''INSERT INTO members
-                     (family_id, first_name, middle_name, last_name, age, gender, phone, email, aadhar, address, prev_problem, curr_problem)
-                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
-                  (uid, first_name, middle_name, last_name, age, gender, phone, email, aadhar, address, prev_problem, curr_problem))
+                     (family_id, first_name, middle_name, last_name, age, gender, phone, email, password_hash, aadhar, address, prev_problem, curr_problem)
+                     VALUES (?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?, ?)''',
+                  (uid, first_name, middle_name, last_name, age, gender, phone, email, hashed_password, aadhar, address, prev_problem, curr_problem))
         member_id = c.lastrowid
         conn.commit()
+
+        # ✅ Send email with credentials to the family member
+        if email:
+            try:
+                user_name = f"{first_name} {last_name}"
+                send_family_member_credentials(email, user_name, email, password)
+            except Exception as email_error:
+                # Log the email error but don't fail the user creation
+                logger.error(f"Failed to send email to {email}: {email_error}")
+                # You can choose to return a success response with a warning
+                # or just log the error and continue
 
         return jsonify({'success': True, 'message': 'Family member added successfully', 'member_id': member_id})
 
@@ -3167,7 +3384,6 @@ def api_add_family_member():
     finally:
         if conn:
             conn.close()
-
 
 
 # GET route to fetch family member details
@@ -3294,7 +3510,7 @@ def api_delete_family_member(member_id):
 
 @app.route('/api/book_appointment', methods=['GET', 'POST'])
 def api_book_appointment():
-    # generate_slots_for_doctor(doctor_id=3,days=7)
+    # generate_slots_for_doctor(doctor_id=1,days=7)
     if 'family_id' not in session or session.get('user_type') != 'patient':
         return jsonify({'error': 'Unauthorized'}), 401
 
@@ -8067,124 +8283,124 @@ def view_appointment(appointment_id):
         logger.error(f"Error in view_appointment route: {e}")
         return redirect('/patient_dashboard#appointments?error=Failed to view appointment')
     
-@app.route('/reschedule_appointment/<int:appointment_id>')
-def reschedule_appointment(appointment_id):
-    if 'family_id' not in session or session.get('user_type') != 'patient':
-        return redirect('/')
+# @app.route('/reschedule_appointment/<int:appointment_id>')
+# def reschedule_appointment(appointment_id):
+#     if 'family_id' not in session or session.get('user_type') != 'patient':
+#         return redirect('/')
     
-    try:
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get current appointment details
-        c.execute('''SELECT a.id, a.member_id, a.slot_id, m.first_name, m.last_name,
-                    d.name as doctor_name, d.id as doctor_id, s.slot_time
-                    FROM appointments a 
-                    JOIN slots s ON a.slot_id = s.id 
-                    JOIN doctors d ON s.doctor_id = d.id 
-                    JOIN members m ON a.member_id = m.id 
-                    WHERE a.id = ? AND m.family_id = ? AND a.status = "Scheduled"''', 
-                 (appointment_id, session['family_id']))
+#         # Get current appointment details
+#         c.execute('''SELECT a.id, a.member_id, a.slot_id, m.first_name, m.last_name,
+#                     d.name as doctor_name, d.id as doctor_id, s.slot_time
+#                     FROM appointments a 
+#                     JOIN slots s ON a.slot_id = s.id 
+#                     JOIN doctors d ON s.doctor_id = d.id 
+#                     JOIN members m ON a.member_id = m.id 
+#                     WHERE a.id = ? AND m.family_id = ? AND a.status = "Scheduled"''', 
+#                  (appointment_id, session['family_id']))
         
-        appointment = c.fetchone()
+#         appointment = c.fetchone()
         
-        if not appointment:
-            conn.close()
-            return redirect('/patient_dashboard#appointments?error=Appointment not found or cannot be rescheduled')
+#         if not appointment:
+#             conn.close()
+#             return redirect('/patient_dashboard#appointments?error=Appointment not found or cannot be rescheduled')
         
-        # Extract date from the current slot
-        from datetime import datetime
-        slot_datetime = datetime.strptime(appointment['slot_time'], '%Y-%m-%d %H:%M:%S')
-        slot_date = slot_datetime.strftime('%Y-%m-%d')
+#         # Extract date from the current slot
+#         from datetime import datetime
+#         slot_datetime = datetime.strptime(appointment['slot_time'], '%Y-%m-%d %H:%M:%S')
+#         slot_date = slot_datetime.strftime('%Y-%m-%d')
         
-        conn.close()
+#         conn.close()
         
-        # Redirect to book appointment page with pre-filled data
-        return redirect(url_for('book_appointment', 
-                              member_id=appointment['member_id'],
-                              doctor_id=appointment['doctor_id'],
-                              date=slot_date,
-                              appointment_id=appointment_id))
+#         # Redirect to book appointment page with pre-filled data
+#         return redirect(url_for('book_appointment', 
+#                               member_id=appointment['member_id'],
+#                               doctor_id=appointment['doctor_id'],
+#                               date=slot_date,
+#                               appointment_id=appointment_id))
         
-    except Exception as e:
-        logger.error(f"Error redirecting to reschedule: {e}")
-        return redirect('/patient_dashboard#appointments?error=Failed to reschedule appointment')
+#     except Exception as e:
+#         logger.error(f"Error redirecting to reschedule: {e}")
+#         return redirect('/patient_dashboard#appointments?error=Failed to reschedule appointment')
     
-@app.route('/cancel_appointment/<int:appointment_id>')
-def cancel_appointment(appointment_id):
-    if 'family_id' not in session:
-        return redirect('/')
+# @app.route('/cancel_appointment/<int:appointment_id>')
+# def cancel_appointment(appointment_id):
+#     if 'family_id' not in session:
+#         return redirect('/')
     
-    try:
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get appointment details to free up the slot
-        c.execute('''SELECT a.slot_id, m.family_id
-                    FROM appointments a 
-                    JOIN members m ON a.member_id = m.id 
-                    WHERE a.id = ? AND m.family_id = ?''', (appointment_id, session['family_id']))
+#         # Get appointment details to free up the slot
+#         c.execute('''SELECT a.slot_id, m.family_id
+#                     FROM appointments a 
+#                     JOIN members m ON a.member_id = m.id 
+#                     WHERE a.id = ? AND m.family_id = ?''', (appointment_id, session['family_id']))
         
-        appointment = c.fetchone()
+#         appointment = c.fetchone()
         
-        if not appointment:
-            conn.close()
-            return redirect('/patient_dashboard#appointments?error=Appointment not found')
+#         if not appointment:
+#             conn.close()
+#             return redirect('/patient_dashboard#appointments?error=Appointment not found')
         
-        # Free up the slot
-        c.execute('UPDATE slots SET booked = 0 WHERE id = ?', (appointment['slot_id'],))
+#         # Free up the slot
+#         c.execute('UPDATE slots SET booked = 0 WHERE id = ?', (appointment['slot_id'],))
         
-        # Delete the appointment
-        c.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
+#         # Delete the appointment
+#         c.execute('DELETE FROM appointments WHERE id = ?', (appointment_id,))
         
-        conn.commit()
-        conn.close()
-        return redirect('/patient_dashboard#appointments?success=Appointment cancelled successfully')
-    except Exception as e:
-        logger.error(f"Error cancelling appointment: {e}")
-        return redirect('/patient_dashboard#appointments?error=Failed to cancel appointment')
+#         conn.commit()
+#         conn.close()
+#         return redirect('/patient_dashboard#appointments?success=Appointment cancelled successfully')
+#     except Exception as e:
+#         logger.error(f"Error cancelling appointment: {e}")
+#         return redirect('/patient_dashboard#appointments?error=Failed to cancel appointment')
        
 from flask import session, jsonify
 
 
-# Add these routes to your app.py
-@app.route('/doctor/medical_records')
-def doctor_medical_records():
-    if 'family_id' not in session or session.get('user_type') != 'doctor':
-        return redirect('/')
+# # Add these routes to your app.py
+# @app.route('/doctor/medical_records')
+# def doctor_medical_records():
+#     if 'family_id' not in session or session.get('user_type') != 'doctor':
+#         return redirect('/')
     
-    try:
-        uid = session['family_id']
-        conn = get_db()
-        c = conn.cursor()
+#     try:
+#         uid = session['family_id']
+#         conn = get_db()
+#         c = conn.cursor()
         
-        # Get doctor details
-        c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
-        doctor = c.fetchone()
+#         # Get doctor details
+#         c.execute('SELECT * FROM doctors WHERE family_id = ?', (uid,))
+#         doctor = c.fetchone()
         
-        # Get medical records for all patients who have appointments with this doctor
-        c.execute('''SELECT mr.*, m.first_name, m.last_name 
-                    FROM medical_records mr
-                    JOIN members m ON mr.member_id = m.id
-                    WHERE m.id IN (
-                        SELECT DISTINCT a.member_id 
-                        FROM appointments a 
-                        JOIN slots s ON a.slot_id = s.id 
-                        WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
-                    )
-                    ORDER BY mr.record_date DESC''', (uid,))
+#         # Get medical records for all patients who have appointments with this doctor
+#         c.execute('''SELECT mr.*, m.first_name, m.last_name 
+#                     FROM medical_records mr
+#                     JOIN members m ON mr.member_id = m.id
+#                     WHERE m.id IN (
+#                         SELECT DISTINCT a.member_id 
+#                         FROM appointments a 
+#                         JOIN slots s ON a.slot_id = s.id 
+#                         WHERE s.doctor_id = (SELECT id FROM doctors WHERE family_id = ?)
+#                     )
+#                     ORDER BY mr.record_date DESC''', (uid,))
         
-        medical_records = c.fetchall()
+#         medical_records = c.fetchall()
         
-        conn.close()
+#         conn.close()
         
-        return render_template('doctor_medical_records.html', 
-                              doctor=doctor,
-                              medical_records=medical_records,
-                              current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
-    except Exception as e:
-        logger.error(f"Error in doctor medical records route: {e}")
-        return render_template('doctor_medical_records.html', error=f"Failed to load medical records: {str(e)}")
+#         return render_template('doctor_medical_records.html', 
+#                               doctor=doctor,
+#                               medical_records=medical_records,
+#                               current_time=datetime.now().strftime('%Y-%m-%d %H:%M:%S'))
+#     except Exception as e:
+#         logger.error(f"Error in doctor medical records route: {e}")
+#         return render_template('doctor_medical_records.html', error=f"Failed to load medical records: {str(e)}")
 import os
 
 

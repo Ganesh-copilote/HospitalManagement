@@ -516,13 +516,13 @@ const PatientDashboard = () => {
           <div className="flex justify-between items-center mb-4">
             <h3 className={`text-lg font-semibold ${isDark ? 'text-white' : 'text-gray-800'}`}>Upcoming Appointments</h3>
             <button 
-              onClick={() => handleNavigate('/patient_appointments')}
-              className={`text-sm font-medium ${
-                isDark ? 'text-teal-400 hover:text-teal-300' : 'text-teal-600 hover:text-teal-800'
-              }`}
-            >
-              View All
-            </button>
+  onClick={() => setActiveSection('appointments')}
+  className={`text-sm font-medium ${
+    isDark ? 'text-teal-400 hover:text-teal-300' : 'text-teal-600 hover:text-teal-800'
+  }`}
+>
+  View All
+</button>
           </div>
           <div className="space-y-4">
             {data.appointments.filter(apt => apt.status === 'Scheduled').slice(0, 3).map((apt) => (

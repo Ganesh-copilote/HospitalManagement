@@ -7,7 +7,7 @@ import Breadcrumb from '../components/Breadcrumb';
 
 const AddFamilyMember = () => {
   const [formData, setFormData] = useState({
-    first_name: '', last_name: '', phone: '', email: '', age: '', gender: '', aadhar: '', address: '', prev_problem: '', curr_problem: ''
+    first_name: '', last_name: '', phone: '', email: '', password: '', age: '', gender: '', aadhar: '', address: '', prev_problem: '', curr_problem: ''
   });
   const [error, setError] = useState('');
   const [showScrollTop, setShowScrollTop] = useState(false);
@@ -53,8 +53,6 @@ const AddFamilyMember = () => {
             <li>
               <Link to="/patient_dashboard" className="text-blue-600 hover:underline">Dashboard</Link>
             </li>
-          
-          
             <li>/</li>
             <li className="text-gray-500">Add Family Member</li>
           </ul>
@@ -75,11 +73,15 @@ const AddFamilyMember = () => {
               </div>
               <div className="flex rounded-lg border border-gray-300 focus-within:border-blue-600">
                 <span className="flex items-center px-3 bg-blue-50 text-blue-600 rounded-l-lg border-r border-gray-300"><i className="bi bi-telephone"></i></span>
-                <input name="phone" type="tel" onChange={handleChange} placeholder="Phone Number" className="w-full p-3 rounded-r-lg outline-none" />
+                <input name="phone" type="tel" onChange={handleChange} placeholder="Phone Number *" className="w-full p-3 rounded-r-lg outline-none" required/>
               </div>
               <div className="flex rounded-lg border border-gray-300 focus-within:border-blue-600">
                 <span className="flex items-center px-3 bg-blue-50 text-blue-600 rounded-l-lg border-r border-gray-300"><i className="bi bi-envelope"></i></span>
-                <input name="email" type="email" onChange={handleChange} placeholder="Email" className="w-full p-3 rounded-r-lg outline-none" />
+                <input name="email" type="email" onChange={handleChange} placeholder="Email *" className="w-full p-3 rounded-r-lg outline-none" required />
+              </div>
+              <div className="flex rounded-lg border border-gray-300 focus-within:border-blue-600">
+                <span className="flex items-center px-3 bg-blue-50 text-blue-600 rounded-l-lg border-r border-gray-300"><i className="bi bi-lock"></i></span>
+                <input name="password" type="password" onChange={handleChange} placeholder="Password *" className="w-full p-3 rounded-r-lg outline-none" required />
               </div>
               <div className="flex rounded-lg border border-gray-300 focus-within:border-blue-600">
                 <span className="flex items-center px-3 bg-blue-50 text-blue-600 rounded-l-lg border-r border-gray-300"><i className="bi bi-calendar"></i></span>
@@ -96,11 +98,11 @@ const AddFamilyMember = () => {
               </div>
               <div className="flex rounded-lg border border-gray-300 focus-within:border-blue-600">
                 <span className="flex items-center px-3 bg-blue-50 text-blue-600 rounded-l-lg border-r border-gray-300"><i className="bi bi-card-text"></i></span>
-                <input name="aadhar" onChange={handleChange} placeholder="Aadhar Number" className="w-full p-3 rounded-r-lg outline-none" />
+                <input name="aadhar" onChange={handleChange} placeholder="Aadhar Number *" className="w-full p-3 rounded-r-lg outline-none" required/>
               </div>
             </div>
             <div className="mb-4">
-              <textarea name="address" onChange={handleChange} placeholder="Address" className="w-full p-3 rounded-lg border border-gray-300 outline-none" />
+              <textarea name="address" onChange={handleChange} placeholder="Address *" className="w-full p-3 rounded-lg border border-gray-300 outline-none" />
             </div>
             <div className="mb-4">
               <textarea name="prev_problem" onChange={handleChange} placeholder="Previous Medical Problems" className="w-full p-3 rounded-lg border border-gray-300 outline-none" />

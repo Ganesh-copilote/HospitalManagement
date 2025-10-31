@@ -2,6 +2,7 @@ import { useState } from 'react';
 import { useNavigate } from 'react-router-dom';
 import Navbar from '../components/Navbar';
 import ScrollToTop from '../components/ScrollToTop';
+
 const FrontOfficeRegister = () => {
   const [formData, setFormData] = useState({
     first_name: '',
@@ -11,6 +12,7 @@ const FrontOfficeRegister = () => {
     gender: '',
     phone: '',
     email: '',
+    password: '', // ✅ Added password field
     aadhar: '',
     address: '',
     prev_problem: '',
@@ -35,6 +37,19 @@ const FrontOfficeRegister = () => {
     setError('');
     setSuccess('');
 
+    // ✅ Password validation
+    if (!formData.password) {
+      setError('Password is required');
+      setLoading(false);
+      return;
+    }
+
+    if (formData.password.length < 6) {
+      setError('Password must be at least 6 characters long');
+      setLoading(false);
+      return;
+    }
+
     try {
       const response = await fetch('http://localhost:5000/api/front_office_register', {
         method: 'POST',
@@ -48,7 +63,7 @@ const FrontOfficeRegister = () => {
       const data = await response.json();
 
       if (data.success) {
-        setSuccess('Patient registered successfully!');
+        setSuccess('Patient registered successfully! Credentials have been sent to their email.');
         setFormData({
           first_name: '',
           middle_name: '',
@@ -57,15 +72,16 @@ const FrontOfficeRegister = () => {
           gender: '',
           phone: '',
           email: '',
+          password: '', // ✅ Reset password field
           aadhar: '',
           address: '',
           prev_problem: '',
           curr_problem: ''
         });
-        // Redirect to dashboard after 2 seconds
+        // Redirect to dashboard after 3 seconds to show success message
         setTimeout(() => {
           navigate('/front_office_dashboard');
-        }, 2000);
+        }, 3000);
       } else {
         setError(data.error || 'Registration failed');
       }
@@ -150,7 +166,7 @@ const FrontOfficeRegister = () => {
               <div className="grid grid-cols-1 md:grid-cols-3 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Age
+                    Age *
                   </label>
                   <input
                     type="number"
@@ -162,7 +178,7 @@ const FrontOfficeRegister = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Gender
+                    Gender *
                   </label>
                   <select
                     name="gender"
@@ -191,10 +207,11 @@ const FrontOfficeRegister = () => {
                 </div>
               </div>
 
+              {/* ✅ Added Password Field */}
               <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Email
+                    Email *
                   </label>
                   <input
                     type="email"
@@ -206,7 +223,24 @@ const FrontOfficeRegister = () => {
                 </div>
                 <div>
                   <label className="block text-sm font-medium text-gray-700 mb-2">
-                    Aadhar Number
+                    Password *
+                  </label>
+                  <input
+                    type="password"
+                    name="password"
+                    value={formData.password}
+                    onChange={handleChange}
+                    required
+                    placeholder="At least 6 characters"
+                    className="w-full px-3 py-2 border border-gray-300 rounded-lg focus:outline-none focus:ring-2 focus:ring-blue-500"
+                  />
+                </div>
+              </div>
+
+              <div className="grid grid-cols-1 md:grid-cols-2 gap-4">
+                <div>
+                  <label className="block text-sm font-medium text-gray-700 mb-2">
+                    Aadhar Number *
                   </label>
                   <input
                     type="text"
@@ -220,7 +254,7 @@ const FrontOfficeRegister = () => {
 
               <div>
                 <label className="block text-sm font-medium text-gray-700 mb-2">
-                  Address
+                  Address *
                 </label>
                 <textarea
                   name="address"

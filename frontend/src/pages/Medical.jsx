@@ -15,7 +15,8 @@ import {
   deleteUser,
   getAdminPatientData,
   getAdminDoctordata,
-  uploadMedicalRecord
+  uploadMedicalRecord,
+  viewMedicalRecord  // Make sure this is imported
 } from '../services/api';
 
 const Medical = () => {
@@ -131,6 +132,28 @@ const Medical = () => {
     console.log('   editingItem:', editingItem);
     console.log('   activeTab:', activeTab);
   }, [showModal, editingItem, activeTab]);
+
+  // Handle View Medical Record File
+  const handleViewFile = async (record) => {
+    debugger
+    try {
+      console.log('👁️ Viewing medical record file:', record);
+      console.log('Record ID:', record.id);
+      console.log('File path:', record.file_path);
+      
+      if (!record.file_path) {
+        alert('No file attached to this medical record');
+        return;
+      }
+
+      // Use your existing viewMedicalRecord API function
+      await viewMedicalRecord(record.id);
+      
+    } catch (error) {
+      console.error('❌ Error viewing medical record file:', error);
+      alert('Error opening medical record file. Please try again.');
+    }
+  };
 
   const handleEdit = (item) => {
     console.log('🔄 Edit button clicked for:', item);
@@ -416,10 +439,16 @@ const Medical = () => {
     };
 
     const viewFile = () => {
-      if (uploadedFilePath) {
-        // Open the file in a new tab
-        const fullUrl = `http://localhost:5000${uploadedFilePath}`;
-        window.open(fullUrl, '_blank');
+      if (uploadedFilePath || formData.file_path) {
+        // Use the existing viewMedicalRecord API if we have a record ID
+        if (record && record.id) {
+          viewMedicalRecord(record.id);
+        } else {
+          // For new records that haven't been saved yet, open the file directly
+          const filePath = uploadedFilePath || formData.file_path;
+          const fileUrl = `http://localhost:5000${filePath.replace(/\\/g, '/')}`;
+          window.open(fileUrl, '_blank');
+        }
       }
     };
 
@@ -1120,7 +1149,7 @@ const Medical = () => {
                       {filteredData.length > 0 ? (
                         filteredData.map((record, index) => (
                           <motion.div
-                            key={record.id}
+                            key={`medical-record-${record.id}-${index}`}
                             initial={{ opacity: 0, y: 20 }}
                             animate={{ opacity: 1, y: 0 }}
                             transition={{ delay: index * 0.1 }}
@@ -1138,6 +1167,22 @@ const Medical = () => {
                                 </p>
                               </div>
                               <div className="flex space-x-2">
+                                {/* View File Button */}
+                                {record.file_path && (
+                                  <motion.button
+                                    whileHover={{ scale: 1.1 }}
+                                    whileTap={{ scale: 0.9 }}
+                                    onClick={() => handleViewFile(record)}
+                                    className={`p-2 rounded ${
+                                      isDark ? 'bg-green-600 hover:bg-green-700' : 'bg-green-100 hover:bg-green-200'
+                                    } transition-colors duration-200`}
+                                    title="View File"
+                                  >
+                                    <Eye size={16} className={isDark ? 'text-white' : 'text-green-600'} />
+                                  </motion.button>
+                                )}
+                                
+                                {/* Edit Button */}
                                 <motion.button
                                   whileHover={{ scale: 1.1 }}
                                   whileTap={{ scale: 0.9 }}
@@ -1145,9 +1190,12 @@ const Medical = () => {
                                   className={`p-2 rounded ${
                                     isDark ? 'bg-blue-600 hover:bg-blue-700' : 'bg-blue-100 hover:bg-blue-200'
                                   } transition-colors duration-200`}
+                                  title="Edit Record"
                                 >
                                   <Edit size={16} className={isDark ? 'text-white' : 'text-blue-600'} />
                                 </motion.button>
+                                
+                                {/* Delete Button */}
                                 <motion.button
                                   whileHover={{ scale: 1.1 }}
                                   whileTap={{ scale: 0.9 }}
@@ -1155,6 +1203,7 @@ const Medical = () => {
                                   className={`p-2 rounded ${
                                     isDark ? 'bg-red-600 hover:bg-red-700' : 'bg-red-100 hover:bg-red-200'
                                   } transition-colors duration-200`}
+                                  title="Delete Record"
                                 >
                                   <Trash2 size={16} className={isDark ? 'text-white' : 'text-red-600'} />
                                 </motion.button>
@@ -1177,14 +1226,12 @@ const Medical = () => {
                                 <div className="md:col-span-2">
                                   <strong className={isDark ? 'text-gray-300' : 'text-gray-700'}>File:</strong>
                                   <p className={isDark ? 'text-gray-400' : 'text-gray-600'}>
-                                    <a 
-                                      href={`http://localhost:5000${record.file_path}`} 
-                                      target="_blank" 
-                                      rel="noopener noreferrer"
-                                      className="text-blue-500 hover:text-blue-700 underline"
+                                    <button 
+                                      onClick={() => handleViewFile(record)}
+                                      className="text-blue-500 hover:text-blue-700 underline cursor-pointer text-left"
                                     >
-                                      {record.file_path.split('/').pop()}
-                                    </a>
+                                      {record.file_path.split('\\').pop() || record.file_path.split('/').pop()}
+                                    </button>
                                   </p>
                                 </div>
                               )}
@@ -1244,15 +1291,6 @@ const Medical = () => {
                                 >
                                   <Trash2 size={16} className={isDark ? 'text-white' : 'text-red-600'} />
                                 </motion.button>
-                                {/* <motion.button
-                                  whileHover={{ scale: 1.05 }}
-                                  whileTap={{ scale: 0.95 }}
-                                  className={`p-2 rounded ${
-                                    isDark ? 'bg-emerald-600 hover:bg-emerald-700' : 'bg-emerald-100 hover:bg-emerald-200'
-                                  } transition-colors duration-200`}
-                                >
-                                  <Download size={16} className={isDark ? 'text-white' : 'text-emerald-600'} />
-                                </motion.button> */}
                               </div>
                             </div>
                             <div className="space-y-2">
@@ -1335,6 +1373,7 @@ const Medical = () => {
         }}
         title={editingItem ? `Edit ${activeTab === 'medical' ? 'Medical Record' : 'Prescription'}` : `Add New ${activeTab === 'medical' ? 'Medical Record' : 'Prescription'}`}
         isDark={isDark}
+        key={editingItem ? `edit-${editingItem.id}` : 'add-new'}
       >
         {activeTab === 'medical' ? (
           <MedicalRecordForm
@@ -1346,6 +1385,7 @@ const Medical = () => {
               setEditingItem(null);
             }}
             isDark={isDark}
+            key={editingItem ? `medical-form-${editingItem.id}` : 'medical-form-new'}
           />
         ) : (
           <PrescriptionForm
@@ -1357,6 +1397,7 @@ const Medical = () => {
               setEditingItem(null);
             }}
             isDark={isDark}
+            key={editingItem ? `prescription-form-${editingItem.id}` : 'prescription-form-new'}
           />
         )}
       </AdminModal>
